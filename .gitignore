@@ -12,6 +12,7 @@ api/target/
 # Docker volumes - data
 data/
 backups/
+pg_backups/
 logs/
 
 # Environment secrets

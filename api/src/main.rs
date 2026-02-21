@@ -1,5 +1,6 @@
 use axum::Router;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{CorsLayer, AllowOrigin};
+use axum::http::{HeaderValue, Method, header};
 use tower_http::trace::TraceLayer;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -49,10 +50,20 @@ async fn main() {
         chat_rooms: Arc::new(RwLock::new(HashMap::new())),
     };
 
+    let allowed_origins = [
+        "https://nodi.vn",
+        "https://www.nodi.vn",
+        "https://api.nodi.vn",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ]
+    .map(|o| o.parse::<HeaderValue>().unwrap());
+
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(allowed_origins.to_vec())
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT, header::ORIGIN])
+        .allow_credentials(true);
 
     let app = Router::new()
         .merge(routes::health::router())
