@@ -33,7 +33,7 @@
         <a href="#" @click.prevent="alert('Liên hệ Zalo 0374.222.326 để reset mật khẩu')" class="forgot">Quên mật khẩu?</a>
       </div>
       <p class="login-help">
-        Chưa có tài khoản? <NuxtLink to="/tai-ung-dung">Tải app & kích hoạt license →</NuxtLink>
+        Chưa có tài khoản? <NuxtLink to="/register" class="register-link">Đăng ký miễn phí →</NuxtLink>
       </p>
     </div>
   </div>

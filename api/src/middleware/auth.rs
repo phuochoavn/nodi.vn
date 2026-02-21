@@ -9,10 +9,13 @@ pub struct Claims {
     pub sub: i32,      // user id
     pub store_id: i32, // store id
     pub role: String,
+    #[serde(default)]
+    pub token_type: String, // "access" or "refresh" (default empty for backward compat)
     pub exp: usize,    // expiration timestamp
     pub iat: usize,    // issued at
 }
 
+/// Create access token (24h)
 pub fn create_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Result<String, AppError> {
     let now = Utc::now();
     #[allow(deprecated)]
@@ -22,6 +25,7 @@ pub fn create_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Re
         sub: user_id,
         store_id,
         role: role.to_string(),
+        token_type: "access".to_string(),
         exp: expiry.timestamp() as usize,
         iat: now.timestamp() as usize,
     };
@@ -34,13 +38,60 @@ pub fn create_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Re
     .map_err(|e| AppError::Internal(format!("JWT encode error: {}", e)))
 }
 
-#[allow(dead_code)]
+/// Create refresh token (30 days)
+pub fn create_refresh_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Result<String, AppError> {
+    let now = Utc::now();
+    #[allow(deprecated)]
+    let expiry = now + Duration::days(30);
+
+    let claims = Claims {
+        sub: user_id,
+        store_id,
+        role: role.to_string(),
+        token_type: "refresh".to_string(),
+        exp: expiry.timestamp() as usize,
+        iat: now.timestamp() as usize,
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|e| AppError::Internal(format!("JWT encode error: {}", e)))
+}
+
+/// Verify access token
 pub fn verify_token(token: &str, secret: &str) -> Result<Claims, AppError> {
-    decode::<Claims>(
+    let claims = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     )
     .map(|data| data.claims)
-    .map_err(|e| AppError::Unauthorized(format!("Invalid token: {}", e)))
+    .map_err(|e| AppError::Unauthorized(format!("Invalid token: {}", e)))?;
+
+    // Accept both access tokens and tokens without token_type (backward compatibility)
+    if claims.token_type != "access" && !claims.token_type.is_empty() {
+        return Err(AppError::Unauthorized("Invalid token type".into()));
+    }
+
+    Ok(claims)
+}
+
+/// Verify refresh token
+pub fn verify_refresh_token(token: &str, secret: &str) -> Result<Claims, AppError> {
+    let claims = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map(|data| data.claims)
+    .map_err(|e| AppError::Unauthorized(format!("Invalid refresh token: {}", e)))?;
+
+    if claims.token_type != "refresh" {
+        return Err(AppError::Unauthorized("Not a refresh token".into()));
+    }
+
+    Ok(claims)
 }

@@ -55,13 +55,45 @@ async fn upload_backup(
     let identifier = identifier.ok_or(AppError::Unauthorized("No license_key provided".into()))?;
 
     // Identify store (accepts license_key OR HWID)
-    let store_id: i32 = sqlx::query_scalar(
-        "SELECT id FROM stores WHERE (license_key = $1 OR hwid = $1) AND is_active = true"
+    let store = sqlx::query_as::<_, (i32, Option<String>)>(
+        "SELECT id, license_type FROM stores WHERE (license_key = $1 OR hwid = $1) AND is_active = true"
     )
     .bind(&identifier)
     .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::Unauthorized("Invalid license key or HWID".into()))?;
+
+    let store_id = store.0;
+    let license_type = store.1.unwrap_or_else(|| "free".to_string());
+
+    // Quota check based on license type
+    let (max_backups, max_file_size): (i64, usize) = match license_type.as_str() {
+        "free" => (3, 50 * 1024 * 1024),      // 3 backups, 50MB each
+        _ => (10, 200 * 1024 * 1024),           // 10 backups, 200MB each
+    };
+
+    let file_data_len = file_data.len();
+    if file_data_len > max_file_size {
+        return Err(AppError::BadRequest(format!(
+            "File quá lớn. Giới hạn: {}MB cho gói {}",
+            max_file_size / (1024 * 1024), license_type
+        )));
+    }
+
+    // Check backup count quota
+    let current_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM backup_files WHERE store_id = $1"
+    )
+    .bind(store_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if current_count >= max_backups {
+        return Err(AppError::BadRequest(format!(
+            "Đã đạt giới hạn {} bản backup cho gói {}. Vui lòng xóa backup cũ hoặc nâng cấp gói.",
+            max_backups, license_type
+        )));
+    }
 
     // Create directory
     let dir = format!("/opt/nodi/backups/{}", store_id);
@@ -85,8 +117,8 @@ async fn upload_backup(
     .execute(&state.pool)
     .await?;
 
-    // Rotation: keep max 10 per store
-    cleanup_old_backups(store_id, &state.pool).await;
+    // Rotation: keep max N per license type
+    cleanup_old_backups(store_id, max_backups, &state.pool).await;
 
     let url = format!("/backups/{}/{}", identifier, filename);
     tracing::info!("✅ Backup uploaded: store_id={}, file={}, size={}", store_id, filename, file_size);
@@ -198,10 +230,10 @@ fn extract_jwt(headers: &HeaderMap, secret: &str) -> Result<auth::Claims, AppErr
     auth::verify_token(token, secret)
 }
 
-async fn cleanup_old_backups(store_id: i32, pool: &sqlx::PgPool) {
-    // Keep max 10 backups per store
+async fn cleanup_old_backups(store_id: i32, max_backups: i64, pool: &sqlx::PgPool) {
+    // Keep max N backups per store (N depends on license type)
     let old_files = sqlx::query_as::<_, (i32, String)>(
-        "SELECT id, file_path FROM backup_files WHERE store_id = $1 ORDER BY created_at DESC OFFSET 10"
+        &format!("SELECT id, file_path FROM backup_files WHERE store_id = $1 ORDER BY created_at DESC OFFSET {}", max_backups)
     )
     .bind(store_id)
     .fetch_all(pool)
