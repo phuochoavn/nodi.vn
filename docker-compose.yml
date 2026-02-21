@@ -1,0 +1,72 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nodi-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - postgres
+      - axum-api
+      - nuxt-web
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: nodi-postgres
+    environment:
+      POSTGRES_DB: nodi
+      POSTGRES_USER: nodi_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
+  axum-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: nodi-api
+    environment:
+      DATABASE_URL: postgres://nodi_admin:${POSTGRES_PASSWORD}@postgres:5432/nodi
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_PHONE: ${ADMIN_PHONE}
+      RUST_LOG: nodi_api=debug,tower_http=debug
+    depends_on:
+      - postgres
+    volumes:
+      - ./backups:/opt/nodi/backups
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
+  nuxt-web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: nodi-web
+    environment:
+      NUXT_PUBLIC_API_BASE: http://axum-api:3000
+    depends_on:
+      - axum-api
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
+networks:
+  nodi-network:
+    driver: bridge

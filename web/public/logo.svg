@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="40" viewBox="0 0 180 40" fill="none">
+  <!-- Wheat Icon -->
+  <g transform="translate(4, 4)">
+    <!-- Stem -->
+    <path d="M16 30 L16 8" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Grains left -->
+    <ellipse cx="11" cy="8" rx="4" ry="7" fill="#22c55e" transform="rotate(-15, 11, 8)"/>
+    <ellipse cx="10" cy="16" rx="3.5" ry="6" fill="#16a34a" transform="rotate(-12, 10, 16)"/>
+    <!-- Grains right -->
+    <ellipse cx="21" cy="8" rx="4" ry="7" fill="#22c55e" transform="rotate(15, 21, 8)"/>
+    <ellipse cx="22" cy="16" rx="3.5" ry="6" fill="#16a34a" transform="rotate(12, 22, 16)"/>
+    <!-- Top grain -->
+    <ellipse cx="16" cy="4" rx="3" ry="5" fill="#4ade80"/>
+  </g>
+  <!-- Text -->
+  <text x="44" y="28" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="22" fill="#0f172a">
+    <tspan>Nodi</tspan><tspan fill="#16a34a">POS</tspan>
+  </text>
+</svg>

@@ -1,0 +1,22 @@
+{
+  "name": "nodi-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@nuxtjs/color-mode": "^4.0.0",
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "chart.js": "^4.5.1",
+    "lucide-vue-next": "^0.575.0",
+    "nuxt": "^3.16.0",
+    "vue": "^3.5.0",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^4.5.0"
+  }
+}

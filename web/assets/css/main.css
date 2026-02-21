@@ -1,0 +1,296 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Nodi POS — Global Styles + Dark Mode
+   ============================================================ */
+
+@layer base {
+  :root {
+    --primary: #16a34a;
+    --primary-light: #22c55e;
+    --primary-dark: #15803d;
+    --secondary: #2563eb;
+    --secondary-light: #3b82f6;
+    --accent: #f59e0b;
+    --accent-dark: #d97706;
+
+    --bg: #ffffff;
+    --surface: #f8fafc;
+    --surface-alt: #f1f5f9;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+
+    --radius: 12px;
+    --radius-sm: 8px;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface-alt: #334155;
+    --border: #334155;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply font-sans text-[var(--text)] bg-[var(--bg)] leading-relaxed;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  img {
+    @apply max-w-full h-auto;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 dark:bg-slate-600 rounded-full;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-primary/20 text-primary-800;
+  }
+}
+
+@layer components {
+
+  /* ============ Container ============ */
+  .container {
+    @apply max-w-[1200px] mx-auto px-4 sm:px-6;
+  }
+
+  /* ============ Buttons ============ */
+  .btn {
+    @apply inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-base cursor-pointer border-none transition-all duration-300 no-underline whitespace-nowrap;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white shadow-md hover:bg-primary-700 hover:-translate-y-0.5 hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply bg-white dark:bg-slate-800 text-primary border-2 border-primary hover:bg-primary hover:text-white hover:-translate-y-0.5;
+  }
+
+  .btn-accent {
+    @apply bg-accent text-slate-900 shadow-md hover:bg-accent-600 hover:-translate-y-0.5;
+  }
+
+  .btn-outline {
+    @apply bg-transparent border-2 border-slate-200 dark:border-slate-600 text-[var(--text)] hover:border-primary hover:text-primary hover:-translate-y-0.5;
+  }
+
+  .btn-lg {
+    @apply px-8 py-4 text-lg;
+  }
+
+  .btn-hero-outline {
+    @apply bg-transparent text-white border-2 border-white/40 hover:bg-white/10 hover:border-white/70 hover:-translate-y-0.5;
+  }
+
+  /* ============ Section ============ */
+  .section {
+    @apply py-16 md:py-24;
+  }
+
+  .section-alt {
+    @apply bg-[var(--surface)];
+  }
+
+  .section-dark {
+    @apply bg-slate-900 text-slate-100;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-extrabold text-center mb-4 tracking-tight;
+  }
+
+  .section-subtitle {
+    @apply text-center text-[var(--text-muted)] text-lg max-w-[600px] mx-auto mb-12;
+  }
+
+  .section-dark .section-subtitle {
+    @apply text-slate-300;
+  }
+
+  /* ============ Cards ============ */
+  .card {
+    @apply bg-white dark:bg-slate-800 rounded-2xl p-6 md:p-8 border border-transparent dark:border-slate-700/50 shadow-card transition-all duration-300;
+  }
+
+  .card:hover {
+    @apply -translate-y-1 shadow-card-hover;
+  }
+
+  /* Glass Card */
+  .card-glass {
+    @apply bg-white/70 dark:bg-slate-800/60 backdrop-blur-xl border border-white/20 dark:border-slate-700/30 rounded-2xl p-6 md:p-8 transition-all duration-300;
+  }
+
+  /* ============ Badge ============ */
+  .badge {
+    @apply inline-block px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-green {
+    @apply bg-primary/10 text-primary dark:bg-primary/20;
+  }
+
+  .badge-amber {
+    @apply bg-accent/10 text-accent-700 dark:bg-accent/20 dark:text-accent-300;
+  }
+
+  /* ============ Page Header ============ */
+  .page-header {
+    @apply bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 pt-28 pb-14 md:pt-32 md:pb-16 text-center text-white relative overflow-hidden;
+  }
+
+  .page-header::before {
+    content: '';
+    @apply absolute inset-0;
+    background:
+      radial-gradient(ellipse at 30% 50%, rgba(22, 163, 74, 0.15) 0%, transparent 60%),
+      radial-gradient(ellipse at 70% 30%, rgba(37, 99, 235, 0.1) 0%, transparent 50%);
+  }
+
+  .page-header h1 {
+    @apply text-3xl md:text-4xl font-extrabold mb-3 relative z-10 tracking-tight;
+  }
+
+  .page-header p {
+    @apply text-slate-300 text-lg relative z-10;
+  }
+
+  /* ============ Grid Layouts ============ */
+  .grid-2 {
+    @apply grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8;
+  }
+
+  .grid-3 {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8;
+  }
+
+  .grid-4 {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6;
+  }
+
+  /* ============ Form Elements ============ */
+  .form-input {
+    @apply w-full px-4 py-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] text-base font-sans transition-all duration-200 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20;
+  }
+
+  .form-label {
+    @apply block font-semibold text-sm mb-1.5 text-[var(--text)];
+  }
+
+  /* ============ Page Transition ============ */
+  .page-enter-active,
+  .page-leave-active {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .page-enter-from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  .page-leave-to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+
+  /* ============ Scroll Reveal ============ */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .reveal-delay-1 {
+    transition-delay: 100ms;
+  }
+
+  .reveal-delay-2 {
+    transition-delay: 200ms;
+  }
+
+  .reveal-delay-3 {
+    transition-delay: 300ms;
+  }
+
+  .reveal-delay-4 {
+    transition-delay: 400ms;
+  }
+
+  .reveal-delay-5 {
+    transition-delay: 500ms;
+  }
+
+  .reveal-delay-6 {
+    transition-delay: 600ms;
+  }
+
+  /* ============ Premium UI ============ */
+  .noise-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  }
+
+  .section-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  .bg-grid-dots {
+    background-image: radial-gradient(rgba(148, 163, 184, 0.15) 1.5px, transparent 1.5px);
+    background-size: 24px 24px;
+  }
+
+  .hero-glow {
+    background: radial-gradient(800px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(22, 163, 74, 0.06), transparent 80%);
+  }
+}
