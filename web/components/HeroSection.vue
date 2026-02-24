@@ -74,76 +74,52 @@
           </div>
         </div>
 
-        <!-- Right Content (Mockup) -->
-        <div class="flex-1 w-full max-w-lg lg:max-w-none relative perspective-1000 reveal reveal-delay-2 hidden md:block">
+        <!-- Right Content (Stacked Screenshot Mockup) -->
+        <div class="flex-1 w-full max-w-lg lg:max-w-xl relative reveal reveal-delay-2 hidden md:block">
           <!-- Glow behind mockup -->
-          <div class="absolute -inset-4 bg-gradient-to-tr from-green-500/20 to-blue-500/20 rounded-[2rem] blur-2xl -z-10 animate-pulse-soft"></div>
+          <div class="absolute -inset-8 bg-gradient-to-tr from-green-500/25 to-blue-500/15 rounded-[3rem] blur-3xl -z-10 animate-pulse-soft"></div>
           
-          <!-- CSS-only App Mockup -->
-          <div class="relative w-full rounded-2xl bg-[#0f172a] p-2 sm:p-3 shadow-2xl shadow-green-900/50 border border-slate-700/50 transform rotate-y-[-5deg] rotate-x-[5deg] hover:rotate-y-0 hover:rotate-x-0 transition-transform duration-700 ease-out">
-            <!-- Screen container -->
-            <div class="bg-[#1e293b] rounded-xl p-3 sm:p-5 h-[350px] sm:h-[420px] shadow-inner flex flex-col relative overflow-hidden">
-              <div class="absolute inset-0 noise-overlay"></div>
-              
-              <!-- Top bar -->
-              <div class="flex items-center gap-4 mb-5 border-b border-slate-700/50 pb-4 relative z-10">
-                <div class="flex gap-1.5">
-                  <div class="w-3 h-3 rounded-full bg-red-500/80 shadow-sm shadow-red-500/50"></div>
-                  <div class="w-3 h-3 rounded-full bg-yellow-500/80 shadow-sm shadow-yellow-500/50"></div>
-                  <div class="w-3 h-3 rounded-full bg-green-500/80 shadow-sm shadow-green-500/50"></div>
+          <!-- Stacked Screenshots Container -->
+          <div class="relative w-full h-[420px] lg:h-[480px]">
+            
+            <!-- Back layer: Tax screen -->
+            <div class="hero-screenshot hero-screenshot--back absolute top-0 right-0 w-[75%] h-auto rounded-2xl overflow-hidden shadow-2xl shadow-black/40 border border-slate-600/30 transform rotate-3 translate-x-4 -translate-y-2 hover:rotate-1 hover:translate-x-2 transition-all duration-700 ease-out z-10">
+              <img src="/screenshots/hero-tax.png" alt="Thuế & Kế toán - Nodi POS" class="w-full h-auto block" loading="lazy" />
+            </div>
+
+            <!-- Middle layer: Cashflow screen -->
+            <div class="hero-screenshot hero-screenshot--mid absolute top-8 right-8 w-[78%] h-auto rounded-2xl overflow-hidden shadow-2xl shadow-black/40 border border-slate-600/40 transform -rotate-2 hover:-rotate-1 transition-all duration-700 ease-out z-20">
+              <img src="/screenshots/hero-cashflow.png" alt="Sổ Quỹ Cashflow - Nodi POS" class="w-full h-auto block" loading="lazy" />
+            </div>
+
+            <!-- Front layer: POS screen (Primary) -->
+            <div class="hero-screenshot hero-screenshot--front absolute top-14 left-0 w-[85%] h-auto rounded-2xl overflow-hidden shadow-2xl shadow-green-900/50 border border-green-500/20 transform -rotate-1 hover:rotate-0 hover:-translate-y-1 transition-all duration-700 ease-out z-30">
+              <!-- Green glow ring on primary -->
+              <div class="absolute -inset-px rounded-2xl bg-gradient-to-tr from-green-500/30 to-emerald-500/10 -z-10 blur-sm"></div>
+              <img src="/screenshots/hero-pos.png" alt="Bán Hàng POS - Nodi POS" class="w-full h-auto block" loading="lazy" />
+            </div>
+
+            <!-- Floating badges -->
+            <div class="absolute -bottom-2 -left-4 z-40 bg-slate-800/90 backdrop-blur-md border border-slate-600/50 rounded-xl px-4 py-2.5 shadow-xl animate-float">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                  <ShoppingCart :size="16" class="text-green-400" />
                 </div>
-                <!-- Search bar fake -->
-                <div class="flex-1 bg-slate-800/80 rounded-lg h-7 border border-slate-700 flex items-center px-3">
-                  <div class="w-3 h-3 rounded-full border-2 border-slate-500 mr-2"></div>
-                  <div class="w-24 h-2 bg-slate-600 rounded-full"></div>
+                <div>
+                  <div class="text-xs text-slate-400">Bán hàng</div>
+                  <div class="text-sm font-bold text-white">POS nhanh 5s</div>
                 </div>
               </div>
+            </div>
 
-              <!-- Sidebar + Content -->
-              <div class="flex gap-4 flex-1 relative z-10">
-                <!-- Sidebar -->
-                <div class="w-1/4 max-w-[120px] space-y-3 border-r border-slate-700/50 pr-3">
-                  <div class="h-6 bg-green-500/20 border border-green-500/30 rounded flex items-center px-2 gap-2">
-                    <div class="w-3 h-3 bg-green-400 rounded-sm"></div>
-                    <div class="w-10 h-1.5 bg-green-400/80 rounded-full"></div>
-                  </div>
-                  <div class="h-6 hover:bg-slate-800 rounded flex items-center px-2 gap-2">
-                    <div class="w-3 h-3 bg-slate-500 rounded-sm"></div>
-                    <div class="w-12 h-1.5 bg-slate-500 rounded-full"></div>
-                  </div>
-                  <div class="h-6 hover:bg-slate-800 rounded flex items-center px-2 gap-2">
-                    <div class="w-3 h-3 bg-slate-500 rounded-sm"></div>
-                    <div class="w-16 h-1.5 bg-slate-500 rounded-full"></div>
-                  </div>
-                  <div class="h-6 hover:bg-slate-800 rounded flex items-center px-2 gap-2">
-                    <div class="w-3 h-3 bg-slate-500 rounded-sm"></div>
-                    <div class="w-8 h-1.5 bg-slate-500 rounded-full"></div>
-                  </div>
+            <div class="absolute -top-4 right-0 z-40 bg-slate-800/90 backdrop-blur-md border border-slate-600/50 rounded-xl px-4 py-2.5 shadow-xl animate-float" style="animation-delay: 1.5s;">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <BarChart3 :size="16" class="text-blue-400" />
                 </div>
-
-                <!-- Main area -->
-                <div class="flex-1 flex flex-col gap-4">
-                  <!-- Header stats -->
-                  <div class="grid grid-cols-3 gap-3">
-                    <div class="h-16 bg-slate-800 rounded-xl border border-slate-700 p-2 flex flex-col justify-center">
-                      <div class="w-6 h-1.5 bg-slate-500 mb-2 rounded-full"></div>
-                      <div class="w-16 h-3 bg-green-400 rounded-full"></div>
-                    </div>
-                    <div class="h-16 bg-slate-800 rounded-xl border border-slate-700 p-2 flex flex-col justify-center">
-                      <div class="w-8 h-1.5 bg-slate-500 mb-2 rounded-full"></div>
-                      <div class="w-12 h-3 bg-slate-200 rounded-full"></div>
-                    </div>
-                    <div class="h-16 bg-slate-800 rounded-xl border border-slate-700 p-2 flex flex-col justify-center">
-                      <div class="w-5 h-1.5 bg-slate-500 mb-2 rounded-full"></div>
-                      <div class="w-14 h-3 bg-slate-200 rounded-full"></div>
-                    </div>
-                  </div>
-
-                  <!-- Chart placeholder -->
-                  <div class="flex-1 bg-slate-800 rounded-xl border border-slate-700 p-3 relative overflow-hidden flex items-end gap-2">
-                    <!-- Fake chart bars -->
-                    <div v-for="i in 8" :key="i" class="flex-1 bg-gradient-to-t from-green-500/80 to-green-400 rounded-t-sm" :style="{ height: `${Math.random() * 60 + 20}%` }"></div>
-                  </div>
+                <div>
+                  <div class="text-xs text-slate-400">Báo cáo</div>
+                  <div class="text-sm font-bold text-white">Realtime</div>
                 </div>
               </div>
             </div>
@@ -163,8 +139,8 @@
 </template>
 
 <script setup>
-import { Download, ArrowRight, Sparkles, Zap, RefreshCw, ShieldCheck } from 'lucide-vue-next'
-import { ref, onMounted } from 'vue'
+import { Download, ArrowRight, Sparkles, Zap, RefreshCw, ShieldCheck, ShoppingCart, BarChart3 } from 'lucide-vue-next'
+import { ref } from 'vue'
 
 const heroRef = ref(null)
 
@@ -181,5 +157,45 @@ const handleMouseMove = (e) => {
 <style scoped>
 .perspective-1000 {
   perspective: 1000px;
+}
+
+/* Float animation for badges */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Subtle hover parallax on screenshot stack */
+.hero-screenshot {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Stagger entrance animation */
+.hero-screenshot--back {
+  animation: slideInBack 1s ease-out 0.6s both;
+}
+.hero-screenshot--mid {
+  animation: slideInMid 1s ease-out 0.4s both;
+}
+.hero-screenshot--front {
+  animation: slideInFront 1s ease-out 0.2s both;
+}
+
+@keyframes slideInBack {
+  from { opacity: 0; transform: rotate(3deg) translateX(40px) translateY(-30px) scale(0.9); }
+  to { opacity: 1; transform: rotate(3deg) translateX(16px) translateY(-8px) scale(1); }
+}
+@keyframes slideInMid {
+  from { opacity: 0; transform: rotate(-2deg) translateX(30px) translateY(20px) scale(0.9); }
+  to { opacity: 1; transform: rotate(-2deg) translateX(0) translateY(0) scale(1); }
+}
+@keyframes slideInFront {
+  from { opacity: 0; transform: rotate(-1deg) translateY(40px) scale(0.95); }
+  to { opacity: 1; transform: rotate(-1deg) translateY(0) scale(1); }
 }
 </style>

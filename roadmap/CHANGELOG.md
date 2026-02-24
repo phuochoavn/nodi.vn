@@ -24,6 +24,22 @@
 
 ## 2026-02-24
 
+### 🎨 UI — Redesign Logo SVG
+- Vẽ lại `logo.svg`: từ icon bông lúa → **ngôi nhà + lá cây** (khớp với logo thật trong app)
+- Cập nhật `favicon.svg` cho nhất quán
+- Tông màu: xanh dương `#0ea5e9` (nhà) + xanh lá `#22c55e` (lá)
+- Files: `web/public/logo.svg`, `web/public/favicon.svg`
+
+### 🎨 UI — Hero Section: Ảnh chụp thật thay mockup trừu tượng
+- Xóa toàn bộ CSS mockup giả (fake sidebar, fake chart bars)
+- Thay bằng **3 ảnh chụp thật** xếp chồng (stacked floating mockup):
+  - Ảnh POS (bán hàng) — nổi bật nhất, ở trên cùng
+  - Ảnh Thu Chi (Cashflow) — xếp phía sau
+  - Ảnh Thuế & Kế toán — xếp dưới cùng
+- Thêm 2 **floating badges**: "Bán hàng POS nhanh 5s" và "Báo cáo Realtime"
+- Hiệu ứng: entrance animation staggered, float animation, green glow
+- Files: `web/components/HeroSection.vue`, `web/public/screenshots/`
+
 ### 📚 DOCS — Tạo tài liệu dự án
 - Tạo folder `roadmap/` chứa tài liệu dự án
 - `PROJECT_INFO.md` — Thông tin toàn diện về dự án: kiến trúc, tech stack, database, cấu trúc thư mục
