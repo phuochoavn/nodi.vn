@@ -70,6 +70,28 @@ export const useAuth = () => {
         }
     }
 
+    const refreshStores = async () => {
+        try {
+            const res = await fetchApi('/api/stores')
+            stores.value = res.stores || []
+            const storesCookie = useCookie('nodi_stores', { maxAge: 86400 })
+            storesCookie.value = JSON.stringify(res.stores || [])
+        } catch (e) {
+            console.error('Failed to refresh stores:', e)
+        }
+    }
+
+    const createStore = async (storeName) => {
+        const res = await fetchApi('/api/stores/create', {
+            method: 'POST',
+            body: { store_name: storeName },
+        })
+        if (res.success) {
+            await refreshStores()
+        }
+        return res
+    }
+
     const fetchApi = (url, opts = {}) => {
         return $fetch(url, {
             ...opts,
@@ -80,5 +102,5 @@ export const useAuth = () => {
         })
     }
 
-    return { token, user, stores, activeStoreId, activeStoreName, isAuthenticated, login, logout, switchStore, loadStores, fetchApi }
+    return { token, user, stores, activeStoreId, activeStoreName, isAuthenticated, login, logout, switchStore, loadStores, refreshStores, createStore, fetchApi }
 }

@@ -75,12 +75,12 @@
               <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 max-w-[200px] truncate">
                 {{ currentStoreName || 'Dashboard' }}
               </span>
-              <ChevronDown v-if="stores.length > 1" :size="14" class="text-slate-400" :class="{ 'rotate-180': showShopDropdown }" />
+              <ChevronDown :size="14" class="text-slate-400" :class="{ 'rotate-180': showShopDropdown }" />
             </button>
             <!-- Dropdown -->
             <Transition enter-active-class="transition-all duration-200 ease-out" enter-from-class="opacity-0 -translate-y-1" enter-to-class="opacity-100 translate-y-0"
                         leave-active-class="transition-all duration-150 ease-in" leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 -translate-y-1">
-              <div v-if="showShopDropdown && stores.length > 1"
+              <div v-if="showShopDropdown"
                    class="absolute top-full left-0 mt-1 w-72 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
                 <button v-for="s in stores" :key="s.store_id"
                         @click="handleSwitchStore(s.store_id)"
@@ -93,6 +93,30 @@
                   </div>
                   <span v-if="s.store_id === activeStoreId" class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Đang chọn</span>
                 </button>
+                <!-- Create Store -->
+                <div class="border-t border-slate-200 dark:border-slate-700 mt-1 pt-1">
+                  <div v-if="showCreateForm" class="px-4 py-2">
+                    <input v-model="newStoreName" type="text" placeholder="Tên cửa hàng mới..."
+                           class="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary"
+                           @keyup.enter="handleCreateStore" />
+                    <div class="flex gap-2 mt-2">
+                      <button @click="handleCreateStore" :disabled="creatingStore"
+                              class="flex-1 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50">
+                        {{ creatingStore ? 'Đang tạo...' : 'Tạo' }}
+                      </button>
+                      <button @click="showCreateForm = false; newStoreName = ''"
+                              class="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                        Hủy
+                      </button>
+                    </div>
+                    <p v-if="createError" class="text-xs text-red-500 mt-1">{{ createError }}</p>
+                  </div>
+                  <button v-else @click="showCreateForm = true"
+                          class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left text-primary">
+                    <Plus :size="16" />
+                    <span class="text-sm font-medium">Thêm cửa hàng</span>
+                  </button>
+                </div>
               </div>
             </Transition>
           </div>
@@ -115,14 +139,18 @@
 </template>
 
 <script setup>
-import { LayoutDashboard, ShoppingCart, Package, Wallet, BarChart3, HardDrive, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Store, Sun, Moon, ChevronDown } from 'lucide-vue-next'
+import { LayoutDashboard, ShoppingCart, Package, Wallet, BarChart3, HardDrive, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Store, Sun, Moon, ChevronDown, Plus } from 'lucide-vue-next'
 
-const { user, stores, activeStoreId, activeStoreName, logout, switchStore, loadStores } = useAuth()
+const { user, stores, activeStoreId, activeStoreName, logout, switchStore, loadStores, createStore } = useAuth()
 const colorMode = useColorMode()
 const sidebarOpen = ref(false)
 const collapsed = ref(false)
 const showShopDropdown = ref(false)
 const shopDropdownRef = ref(null)
+const showCreateForm = ref(false)
+const newStoreName = ref('')
+const creatingStore = ref(false)
+const createError = ref('')
 
 // Load stores on mount
 onMounted(() => {
@@ -142,6 +170,25 @@ const handleSwitchStore = async (storeId) => {
   }
   showShopDropdown.value = false
   await switchStore(storeId)
+}
+
+const handleCreateStore = async () => {
+  if (!newStoreName.value.trim()) return
+  creatingStore.value = true
+  createError.value = ''
+  try {
+    const res = await createStore(newStoreName.value.trim())
+    if (res.success) {
+      showCreateForm.value = false
+      newStoreName.value = ''
+    } else {
+      createError.value = res.message || 'Lỗi tạo cửa hàng'
+    }
+  } catch (e) {
+    createError.value = 'Lỗi kết nối'
+  } finally {
+    creatingStore.value = false
+  }
 }
 
 // Close dropdown on click outside
