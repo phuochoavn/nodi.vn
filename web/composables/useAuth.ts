@@ -1,17 +1,27 @@
 export const useAuth = () => {
     const token = useCookie('nodi_token', { maxAge: 86400 })
     const user = useState('user', () => null)
+    const stores = useState('stores', () => [])
+    const activeStoreId = useCookie('nodi_active_store', { maxAge: 86400 })
+    const activeStoreName = useState('activeStoreName', () => '')
 
     const isAuthenticated = computed(() => !!token.value)
 
-    const login = async (phone, password) => {
-        const res = await $fetch('/api/login-with-license', {
+    const login = async (username, password) => {
+        const res = await $fetch('/api/login', {
             method: 'POST',
-            body: { username: phone, password, license_key: '', hwid: '' },
+            body: { username, password, hwid: '' },
         })
         if (res.success) {
             token.value = res.token
             user.value = res.user
+            stores.value = res.stores || []
+            activeStoreId.value = res.store_id
+            activeStoreName.value = res.store_name || ''
+
+            // Persist stores in cookie
+            const storesCookie = useCookie('nodi_stores', { maxAge: 86400 })
+            storesCookie.value = JSON.stringify(res.stores || [])
         }
         return res
     }
@@ -19,7 +29,45 @@ export const useAuth = () => {
     const logout = () => {
         token.value = null
         user.value = null
+        stores.value = []
+        activeStoreId.value = null
+        activeStoreName.value = ''
+        const storesCookie = useCookie('nodi_stores', { maxAge: 86400 })
+        storesCookie.value = null
         navigateTo('/login')
+    }
+
+    const switchStore = async (storeId) => {
+        const res = await fetchApi('/api/stores/switch', {
+            method: 'POST',
+            body: { store_id: storeId },
+        })
+        if (res.success) {
+            token.value = res.token
+            activeStoreId.value = res.store_id
+            activeStoreName.value = res.store_name || ''
+            // Force page reload to refresh all data
+            window.location.reload()
+        }
+        return res
+    }
+
+    const loadStores = () => {
+        // Load stores from cookie on mount
+        const storesCookie = useCookie('nodi_stores', { maxAge: 86400 })
+        if (storesCookie.value) {
+            try {
+                const parsed = typeof storesCookie.value === 'string'
+                    ? JSON.parse(storesCookie.value)
+                    : storesCookie.value
+                stores.value = parsed || []
+                // Set active store name
+                const active = parsed.find(s => s.store_id === activeStoreId.value)
+                if (active) activeStoreName.value = active.store_name || ''
+            } catch (e) {
+                stores.value = []
+            }
+        }
     }
 
     const fetchApi = (url, opts = {}) => {
@@ -32,5 +80,5 @@ export const useAuth = () => {
         })
     }
 
-    return { token, user, isAuthenticated, login, logout, fetchApi }
+    return { token, user, stores, activeStoreId, activeStoreName, isAuthenticated, login, logout, switchStore, loadStores, fetchApi }
 }

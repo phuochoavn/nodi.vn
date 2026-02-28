@@ -10,8 +10,8 @@
 
       <form @submit.prevent="handleLogin">
         <div class="form-group">
-          <label for="phone">📱 Số điện thoại</label>
-          <input id="phone" v-model="phone" type="tel" placeholder="Nhập số điện thoại" required autofocus>
+          <label for="username">👤 Tên đăng nhập hoặc SĐT</label>
+          <input id="username" v-model="username" type="text" placeholder="hoavn12345 hoặc 0909123456" required autofocus>
         </div>
         <div class="form-group">
           <label for="password">🔒 Mật khẩu</label>
@@ -44,7 +44,7 @@ definePageMeta({ layout: false })
 useHead({ title: 'Đăng nhập — Nodi POS' })
 
 const { login, isAuthenticated } = useAuth()
-const phone = ref('')
+const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
@@ -58,7 +58,7 @@ async function handleLogin() {
   error.value = ''
   loading.value = true
   try {
-    const res = await login(phone.value, password.value)
+    const res = await login(username.value, password.value)
     if (res.success) {
       const dest = res.user?.role === 'admin' ? '/admin' : '/dashboard'
       navigateTo(dest)

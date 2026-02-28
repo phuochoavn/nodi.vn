@@ -1,5 +1,5 @@
 use axum::Router;
-use tower_http::cors::{CorsLayer, AllowOrigin};
+use tower_http::cors::CorsLayer;
 use axum::http::{HeaderValue, Method, header};
 use tower_http::trace::TraceLayer;
 use std::net::SocketAddr;
@@ -29,6 +29,20 @@ pub struct AppState {
     pub chat_rooms: ChatRooms,
 }
 
+/// Security headers middleware
+async fn security_headers(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut res = next.run(req).await;
+    let headers = res.headers_mut();
+    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    headers.insert("x-xss-protection", HeaderValue::from_static("1; mode=block"));
+    headers.insert("referrer-policy", HeaderValue::from_static("strict-origin-when-cross-origin"));
+    res
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -54,8 +68,6 @@ async fn main() {
         "https://nodi.vn",
         "https://www.nodi.vn",
         "https://api.nodi.vn",
-        "http://localhost:3000",
-        "http://localhost:3001",
     ]
     .map(|o| o.parse::<HeaderValue>().unwrap());
 
@@ -69,13 +81,18 @@ async fn main() {
         .merge(routes::health::router())
         .merge(routes::license::router())
         .merge(routes::auth::router())
+        .merge(routes::account::router())
         .merge(routes::sync::router())
         .merge(routes::backup::router())
+        .merge(routes::upload::router())
+        .merge(routes::scanner::router())
         .merge(routes::dashboard::router())
         .merge(routes::admin::router())
         .merge(routes::market::router())
         .merge(routes::support::router())
         .merge(routes::ws_support::router())
+        .merge(routes::store::router())
+        .layer(axum::middleware::from_fn(security_headers))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB

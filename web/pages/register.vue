@@ -20,6 +20,11 @@
           <p v-if="phoneError" class="field-error">{{ phoneError }}</p>
         </div>
         <div class="form-group">
+          <label for="username">👤 Tên đăng nhập</label>
+          <input id="username" v-model="username" type="text" placeholder="VD: minhphat2025" required>
+          <p v-if="usernameError" class="field-error">{{ usernameError }}</p>
+        </div>
+        <div class="form-group">
           <label for="password">🔒 Mật khẩu</label>
           <div class="password-wrapper">
             <input id="password" v-model="password" :type="showPw ? 'text' : 'password'" placeholder="Tối thiểu 6 ký tự" required>
@@ -70,6 +75,7 @@ const apiBase = config.public.apiBase || ''
 
 const storeName = ref('')
 const phone = ref('')
+const username = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const error = ref('')
@@ -91,6 +97,13 @@ const phoneError = computed(() => {
   return ''
 })
 
+const usernameError = computed(() => {
+  if (!username.value) return ''
+  if (username.value.length < 3) return 'Tối thiểu 3 ký tự'
+  if (!/^[a-zA-Z0-9_]+$/.test(username.value)) return 'Chỉ gồm chữ, số và _'
+  return ''
+})
+
 const passwordError = computed(() => {
   if (!password.value) return ''
   if (password.value.length < 6) return 'Mật khẩu tối thiểu 6 ký tự'
@@ -108,11 +121,11 @@ async function handleRegister() {
   success.value = ''
 
   // Client-side validation
-  if (storeNameError.value || phoneError.value || passwordError.value || confirmError.value) {
+  if (storeNameError.value || phoneError.value || usernameError.value || passwordError.value || confirmError.value) {
     error.value = 'Vui lòng kiểm tra lại thông tin'
     return
   }
-  if (!storeName.value.trim() || !phone.value || !password.value || !confirmPassword.value) {
+  if (!storeName.value.trim() || !phone.value || !username.value || !password.value || !confirmPassword.value) {
     error.value = 'Vui lòng điền đầy đủ thông tin'
     return
   }
@@ -123,9 +136,10 @@ async function handleRegister() {
 
   loading.value = true
   try {
-    const res = await $fetch(`${apiBase}/api/auth/register`, {
+    const res = await $fetch(`${apiBase}/api/register`, {
       method: 'POST',
       body: {
+        username: username.value.trim().toLowerCase(),
         phone: phone.value,
         password: password.value,
         store_name: storeName.value.trim(),
@@ -134,12 +148,14 @@ async function handleRegister() {
 
     if (res.success) {
       // Store auth token
-      const authToken = useCookie('auth_token', { maxAge: 86400 })
-      const refreshToken = useCookie('refresh_token', { maxAge: 2592000 })
-      const userData = useCookie('user_data', { maxAge: 86400 })
+      const authToken = useCookie('nodi_token', { maxAge: 86400 })
       authToken.value = res.token
-      refreshToken.value = res.refresh_token
-      userData.value = JSON.stringify(res.user)
+
+      const storesCookie = useCookie('nodi_stores', { maxAge: 86400 })
+      storesCookie.value = JSON.stringify(res.stores || [])
+
+      const activeStore = useCookie('nodi_active_store', { maxAge: 86400 })
+      activeStore.value = res.store_id
 
       success.value = 'Đăng ký thành công! Đang chuyển hướng...'
       setTimeout(() => {

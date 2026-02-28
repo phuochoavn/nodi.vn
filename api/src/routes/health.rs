@@ -1,4 +1,4 @@
-use axum::{Router, Json, routing::get, extract::{State, Query}};
+use axum::{Router, Json, routing::{get, post}, extract::{State, Query}};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -12,7 +12,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/health", get(health_check))
         .route("/api/check-update", get(check_update))
-        .route("/api/update/check", get(update_check))
+        .route("/api/update/check", get(update_check).post(update_check_post))
 }
 
 async fn health_check(State(state): State<AppState>) -> Json<Value> {
@@ -34,14 +34,27 @@ async fn check_update() -> Json<Value> {
     }))
 }
 
-// New endpoint — matches Tauri app expected format
+// GET /api/update/check?current_version=x.y.z
 #[derive(Deserialize)]
 struct UpdateCheckQuery {
     current_version: Option<String>,
 }
 
 async fn update_check(Query(q): Query<UpdateCheckQuery>) -> Json<Value> {
-    let current = q.current_version.unwrap_or_default();
+    build_update_response(q.current_version.unwrap_or_default())
+}
+
+// POST /api/update/check — { "current_version": "x.y.z" }
+#[derive(Deserialize)]
+struct UpdateCheckBody {
+    current_version: Option<String>,
+}
+
+async fn update_check_post(Json(body): Json<UpdateCheckBody>) -> Json<Value> {
+    build_update_response(body.current_version.unwrap_or_default())
+}
+
+fn build_update_response(current: String) -> Json<Value> {
     let has_update = version_cmp(&current, LATEST_VERSION);
 
     if has_update {

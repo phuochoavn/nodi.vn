@@ -187,24 +187,43 @@ pub fn router() -> Router<AppState> {
 // Store identification from headers
 // ============================================================
 
-pub async fn identify_store(headers: &HeaderMap, pool: &PgPool) -> Result<i32, AppError> {
-    // Try X-License-Key first
-    if let Some(key) = headers.get("X-License-Key").and_then(|v| v.to_str().ok()) {
-        if let Some(id) = sqlx::query_scalar::<_, i32>(
-            "SELECT id FROM stores WHERE license_key = $1 AND is_active = true"
-        ).bind(key).fetch_optional(pool).await? {
-            return Ok(id);
+pub async fn identify_store(headers: &HeaderMap, pool: &PgPool, jwt_secret: &str) -> Result<i32, AppError> {
+    // 1. JWT Authorization header (highest priority — user has account)
+    if let Some(auth) = headers.get("Authorization").and_then(|v| v.to_str().ok()) {
+        let token = auth.strip_prefix("Bearer ").unwrap_or(auth);
+        if !token.is_empty() {
+            if let Ok(claims) = crate::middleware::auth::verify_token(token, jwt_secret) {
+                tracing::debug!("Sync: store_id={} from JWT (sub={})", claims.store_id, claims.sub);
+                return Ok(claims.store_id);
+            }
         }
     }
-    // Fallback to X-HWID
+
+    // 2. X-HWID — anonymous sync (user has no account yet)
     if let Some(hwid) = headers.get("X-HWID").and_then(|v| v.to_str().ok()) {
-        if let Some(id) = sqlx::query_scalar::<_, i32>(
-            "SELECT id FROM stores WHERE hwid = $1 AND is_active = true"
-        ).bind(hwid).fetch_optional(pool).await? {
-            return Ok(id);
+        if !hwid.is_empty() {
+            // 2a. Lookup in stores table (existing anonymous entry)
+            if let Some(id) = sqlx::query_scalar::<_, i32>(
+                "SELECT id FROM stores WHERE hwid = $1 AND is_active = true"
+            ).bind(hwid).fetch_optional(pool).await? {
+                return Ok(id);
+            }
+            // 2b. Lookup in accounts table (HWID bound to an account)
+            if let Some(id) = sqlx::query_scalar::<_, i32>(
+                "SELECT id FROM accounts WHERE hwid = $1 AND is_active = true"
+            ).bind(hwid).fetch_optional(pool).await? {
+                return Ok(id + 1_000_000);
+            }
+            // 2c. New HWID — auto-create anonymous store entry
+            let new_id = sqlx::query_scalar::<_, i32>(
+                "INSERT INTO stores (hwid, name, is_active) VALUES ($1, 'Anonymous Store', true) RETURNING id"
+            ).bind(hwid).fetch_one(pool).await?;
+            tracing::info!("🆕 Auto-created anonymous store for HWID: store_id={}", new_id);
+            return Ok(new_id);
         }
     }
-    Err(AppError::Unauthorized("No valid license key or HWID".to_string()))
+
+    Err(AppError::Unauthorized("Missing Authorization or X-HWID header".to_string()))
 }
 
 // ============================================================
@@ -216,7 +235,7 @@ async fn handle_sync(
     headers: HeaderMap,
     Json(payload): Json<SyncPayload>,
 ) -> Result<Json<Value>, AppError> {
-    let store_id = identify_store(&headers, &state.pool).await?;
+    let store_id = identify_store(&headers, &state.pool, &state.config.jwt_secret).await?;
     let mut tx = state.pool.begin().await?;
 
     let mut counts = serde_json::Map::new();

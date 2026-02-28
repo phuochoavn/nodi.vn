@@ -145,15 +145,11 @@ async fn list_backups(
 ) -> Result<Json<Value>, AppError> {
     let claims = extract_jwt(&headers, &state.config.jwt_secret)?;
 
-    // Get store_id: admin can specify, others use their own
+    // Get store_id: admin can specify, others use their JWT store_id
     let store_id = if claims.role == "admin" && query.store_id.is_some() {
         query.store_id.unwrap()
     } else {
-        sqlx::query_scalar::<_, Option<i32>>("SELECT store_id FROM users WHERE id = $1")
-            .bind(claims.sub)
-            .fetch_one(&state.pool)
-            .await?
-            .ok_or(AppError::Unauthorized("User has no store".into()))?
+        claims.store_id
     };
 
     let rows = sqlx::query_as::<_, (i32, String, i64, chrono::NaiveDateTime)>(

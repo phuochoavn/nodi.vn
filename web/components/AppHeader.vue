@@ -38,7 +38,7 @@
         </button>
 
         <!-- Auth buttons (desktop) -->
-        <NuxtLink to="/dashboard"
+        <NuxtLink to="/login"
                   class="hidden md:inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
                   :class="isScrolled || !isHeroPage
                     ? 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -47,14 +47,14 @@
           Đăng nhập
         </NuxtLink>
 
-        <!-- CTA -->
-        <NuxtLink to="/tai-ung-dung"
+        <!-- Register CTA -->
+        <NuxtLink to="/register"
                   class="hidden md:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300"
                   :class="isScrolled || !isHeroPage
                     ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-lg hover:shadow-green-500/25 shadow-sm'
                     : 'bg-white text-primary hover:bg-white/90 shadow-md'">
-          <Download :size="16" />
-          Dùng thử miễn phí
+          <UserPlus :size="16" />
+          Đăng ký miễn phí
         </NuxtLink>
 
         <!-- Mobile menu -->
@@ -88,17 +88,17 @@
             {{ link.label }}
           </NuxtLink>
           <div class="border-t border-slate-100 dark:border-slate-800 my-2"></div>
-          <NuxtLink to="/dashboard"
+          <NuxtLink to="/login"
                     class="px-4 py-3 rounded-xl text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
                     @click="menuOpen = false">
             <LogIn :size="16" />
             Đăng nhập
           </NuxtLink>
-          <NuxtLink to="/tai-ung-dung"
-                    class="mt-2 btn bg-gradient-to-r from-green-500 to-emerald-600 text-white justify-center"
+          <NuxtLink to="/register"
+                    class="mt-2 btn bg-gradient-to-r from-green-500 to-emerald-600 text-white justify-center flex items-center gap-2"
                     @click="menuOpen = false">
-            <Download :size="16" />
-            Dùng thử miễn phí
+            <UserPlus :size="16" />
+            Đăng ký miễn phí
           </NuxtLink>
         </nav>
       </div>
@@ -107,7 +107,7 @@
 </template>
 
 <script setup>
-import { Sun, Moon, Menu, X, Download, LogIn } from 'lucide-vue-next'
+import { Sun, Moon, Menu, X, UserPlus, LogIn } from 'lucide-vue-next'
 
 const route = useRoute()
 const colorMode = useColorMode()

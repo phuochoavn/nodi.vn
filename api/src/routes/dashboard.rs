@@ -49,11 +49,11 @@ async fn overview(
     let sid = get_store_id(&claims, q.store_id);
 
     let revenue_today: (i64,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(total_amount::bigint), 0) FROM synced_invoices WHERE store_id = $1 AND DATE(created_at) = CURRENT_DATE"
+        "SELECT COALESCE(SUM(total_amount)::bigint, 0) FROM synced_invoices WHERE store_id = $1 AND DATE(created_at) = CURRENT_DATE"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let revenue_month: (i64,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(total_amount::bigint), 0) FROM synced_invoices WHERE store_id = $1 AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)"
+        "SELECT COALESCE(SUM(total_amount)::bigint, 0) FROM synced_invoices WHERE store_id = $1 AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let orders_today: (i64,) = sqlx::query_as(
@@ -69,7 +69,7 @@ async fn overview(
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let low_stock: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM synced_products WHERE store_id = $1 AND stock_quantity <= COALESCE(min_stock, 5)"
+        "SELECT COUNT(*) FROM synced_products WHERE store_id = $1 AND stock_quantity::float8 <= COALESCE(min_stock, 5)"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let expiring: (i64,) = sqlx::query_as(
@@ -81,15 +81,15 @@ async fn overview(
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let debt_customers: (i64,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(current_debt::bigint), 0) FROM synced_customers WHERE store_id = $1 AND current_debt > 0"
+        "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_customers WHERE store_id = $1 AND current_debt > 0"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let debt_suppliers: (i64,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(current_debt::bigint), 0) FROM synced_suppliers WHERE store_id = $1 AND current_debt > 0"
+        "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_suppliers WHERE store_id = $1 AND current_debt > 0"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let store_balance: Option<(Option<i64>,)> = sqlx::query_as(
-        "SELECT COALESCE(current_balance::bigint, 0) FROM synced_store_funds WHERE store_id = $1"
+        "SELECT COALESCE(current_balance)::bigint FROM synced_store_funds WHERE store_id = $1"
     ).bind(sid).fetch_optional(&state.pool).await?;
     let balance_val = store_balance.and_then(|r| r.0).unwrap_or(0);
 
@@ -139,7 +139,7 @@ async fn orders_list(
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let rows = sqlx::query_as::<_, (i32, Option<String>, Option<String>, Option<f64>, Option<String>, Option<String>, Option<chrono::NaiveDateTime>)>(
-        "SELECT i.local_id, i.invoice_number, c.name, i.total_amount, i.payment_method, i.status, i.created_at \
+        "SELECT i.local_id, i.invoice_number, c.name, i.total_amount::float8, i.payment_method, i.status, i.created_at \
          FROM synced_invoices i LEFT JOIN synced_customers c ON i.customer_id = c.local_id AND c.store_id = i.store_id \
          WHERE i.store_id = $1 ORDER BY i.created_at DESC LIMIT $2 OFFSET $3"
     ).bind(sid).bind(limit).bind(offset).fetch_all(&state.pool).await?;
@@ -167,7 +167,7 @@ async fn order_detail(
     let sid = claims.store_id;
 
     let order = sqlx::query_as::<_, (i32, Option<String>, Option<String>, Option<String>, Option<f64>, Option<f64>, Option<f64>, Option<String>, Option<String>, Option<chrono::NaiveDateTime>)>(
-        "SELECT i.local_id, i.invoice_number, c.name, c.phone, i.total_amount, i.discount_amount, i.final_amount, i.payment_method, i.status, i.created_at \
+        "SELECT i.local_id, i.invoice_number, c.name, c.phone, i.total_amount::float8, i.discount_amount, i.final_amount, i.payment_method, i.status, i.created_at \
          FROM synced_invoices i LEFT JOIN synced_customers c ON i.customer_id = c.local_id AND c.store_id = i.store_id \
          WHERE i.local_id = $1 AND i.store_id = $2"
     ).bind(id).bind(sid).fetch_optional(&state.pool).await?;
@@ -178,9 +178,9 @@ async fn order_detail(
     };
 
     let items = sqlx::query_as::<_, (Option<String>, Option<String>, Option<f64>, Option<f64>, Option<f64>)>(
-        "SELECT p.name, ii.unit_name, ii.quantity, ii.unit_price, ii.subtotal \
-         FROM synced_invoice_items ii LEFT JOIN synced_products p ON ii.product_id = p.local_id AND p.store_id = ii.store_id \
-         WHERE ii.invoice_id = $1 AND ii.store_id = $2"
+        "SELECT p.name, ii.unit_name, ii.quantity, ii.unit_price, ii.total \
+         FROM synced_invoice_items ii LEFT JOIN synced_products p ON ii.product_local_id = p.local_id AND p.store_id = ii.store_id \
+         WHERE ii.invoice_local_id = $1 AND ii.store_id = $2"
     ).bind(id).bind(sid).fetch_all(&state.pool).await?;
 
     let items_json: Vec<Value> = items.iter().map(|i| json!({
@@ -236,7 +236,7 @@ async fn inventory(
 
     let count_sql = format!("SELECT COUNT(*) FROM synced_products {}", where_clause);
     let data_sql = format!(
-        "SELECT local_id, name, category, stock_quantity, base_unit, cost_price, sell_price, min_stock, expiry_date \
+        "SELECT local_id, name, category, stock_quantity::float8, base_unit, cost_price, sell_price, min_stock, expiry_date \
          FROM synced_products {} ORDER BY name LIMIT $2 OFFSET $3", where_clause
     );
 
@@ -257,7 +257,7 @@ async fn inventory(
     };
 
     let low_stock_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM synced_products WHERE store_id = $1 AND stock_quantity <= COALESCE(min_stock, 5)"
+        "SELECT COUNT(*) FROM synced_products WHERE store_id = $1 AND stock_quantity::float8 <= COALESCE(min_stock, 5)"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let products: Vec<Value> = rows.iter().map(|r| {
@@ -301,7 +301,7 @@ async fn debts(
         ).bind(sid).fetch_all(&state.pool).await?;
 
         let total: (i64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(current_debt::bigint), 0) FROM synced_suppliers WHERE store_id = $1 AND current_debt > 0"
+            "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_suppliers WHERE store_id = $1 AND current_debt > 0"
         ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
         let debts: Vec<Value> = rows.iter().map(|r| json!({
@@ -316,7 +316,7 @@ async fn debts(
         ).bind(sid).fetch_all(&state.pool).await?;
 
         let total: (i64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(current_debt::bigint), 0) FROM synced_customers WHERE store_id = $1 AND current_debt > 0"
+            "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_customers WHERE store_id = $1 AND current_debt > 0"
         ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
         let debts: Vec<Value> = rows.iter().map(|r| json!({
@@ -348,7 +348,7 @@ async fn revenue_report(
     let to = q.to.unwrap_or_else(|| "2099-12-31".to_string());
 
     let rows = sqlx::query_as::<_, (chrono::NaiveDate, i64, i64)>(
-        "SELECT DATE(created_at) as d, COALESCE(SUM(total_amount::bigint), 0), COUNT(*) \
+        "SELECT DATE(created_at) as d, COALESCE(SUM(total_amount)::bigint, 0), COUNT(*) \
          FROM synced_invoices WHERE store_id = $1 AND DATE(created_at) BETWEEN $2::date AND $3::date \
          GROUP BY d ORDER BY d"
     ).bind(sid).bind(&from).bind(&to).fetch_all(&state.pool).await?;
@@ -387,11 +387,11 @@ async fn top_products(
     let lim = q.limit.unwrap_or(10);
 
     let rows = sqlx::query_as::<_, (Option<String>, i64, i64)>(
-        "SELECT p.name, COALESCE(SUM(ii.quantity::bigint), 0), COALESCE(SUM(ii.subtotal::bigint), 0) \
+        "SELECT COALESCE(ii.product_name, p.name), COALESCE(SUM(ii.quantity)::bigint, 0), COALESCE(SUM(ii.total)::bigint, 0) \
          FROM synced_invoice_items ii \
-         JOIN synced_products p ON ii.product_id = p.local_id AND p.store_id = ii.store_id \
+         LEFT JOIN synced_products p ON ii.product_local_id = p.local_id AND p.store_id = ii.store_id \
          WHERE ii.store_id = $1 \
-         GROUP BY p.name ORDER BY 3 DESC LIMIT $2"
+         GROUP BY 1 ORDER BY 3 DESC LIMIT $2"
     ).bind(sid).bind(lim).fetch_all(&state.pool).await?;
 
     let products: Vec<Value> = rows.iter().map(|r| json!({
@@ -407,6 +407,27 @@ async fn settings(
     headers: HeaderMap,
 ) -> Result<Json<Value>, AppError> {
     let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+
+    // For new accounts (store_id >= 1_000_000), query accounts table
+    if claims.store_id >= 1_000_000 {
+        let account_id = claims.store_id - 1_000_000;
+        let acc = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>, Option<String>)>(
+            "SELECT display_name, store_name, phone, store_id FROM accounts WHERE id = $1"
+        ).bind(account_id).fetch_optional(&state.pool).await?;
+
+        let a = acc.unwrap_or((None, None, None, None));
+        return Ok(Json(json!({
+            "store": {
+                "name": a.0.unwrap_or_default(),
+                "address": "",
+                "phone": a.2.unwrap_or_default(),
+                "license_key": null,
+                "license_type": "free",
+                "activated_at": null,
+                "store_id": a.3
+            }
+        })));
+    }
 
     let store = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<chrono::NaiveDateTime>)>(
         "SELECT owner_name, s2.address, s2.phone, s.license_key, s.license_type, s.activated_at \
@@ -442,6 +463,31 @@ async fn change_password(
     Json(body): Json<PasswordChange>,
 ) -> Result<Json<Value>, AppError> {
     let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+
+    // For new accounts (store_id >= 1_000_000), use accounts table
+    if claims.store_id >= 1_000_000 {
+        let account_id = claims.store_id - 1_000_000;
+        let hash: Option<(String,)> = sqlx::query_as(
+            "SELECT password_hash FROM accounts WHERE id = $1"
+        ).bind(account_id).fetch_optional(&state.pool).await?;
+
+        let current_hash = match hash {
+            Some(h) => h.0,
+            None => return Err(AppError::NotFound("Account not found".into())),
+        };
+
+        if !bcrypt::verify(&body.current_password, &current_hash).unwrap_or(false) {
+            return Err(AppError::Unauthorized("Mật khẩu hiện tại không đúng".into()));
+        }
+
+        let new_hash = bcrypt::hash(&body.new_password, 10)
+            .map_err(|e| AppError::Internal(format!("Hash error: {}", e)))?;
+
+        sqlx::query("UPDATE accounts SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&new_hash).bind(account_id).execute(&state.pool).await?;
+
+        return Ok(Json(json!({ "success": true })));
+    }
 
     let hash: Option<(String,)> = sqlx::query_as(
         "SELECT password_hash FROM users WHERE id = $1"

@@ -11,6 +11,8 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./nginx/html:/usr/share/nginx/html:ro
       - ./logs/nginx:/var/log/nginx
+      - ./uploads:/opt/nodi/uploads:ro
+      - ./backups:/opt/nodi/backups:ro
     depends_on:
       - postgres
       - axum-api
@@ -50,6 +52,7 @@ services:
       - postgres
     volumes:
       - ./backups:/opt/nodi/backups
+      - ./uploads:/opt/nodi/uploads
     restart: unless-stopped
     networks:
       - nodi-network

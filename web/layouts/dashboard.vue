@@ -67,10 +67,35 @@
                   @click="sidebarOpen = !sidebarOpen">
             <MenuIcon :size="20" />
           </button>
-          <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Store :size="16" class="text-primary" />
-            {{ user?.display_name || 'Dashboard' }}
-          </span>
+          <!-- Shop Switcher -->
+          <div class="relative" ref="shopDropdownRef">
+            <button @click="showShopDropdown = !showShopDropdown"
+                    class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <Store :size="16" class="text-primary" />
+              <span class="text-sm font-semibold text-slate-800 dark:text-slate-100 max-w-[200px] truncate">
+                {{ currentStoreName || 'Dashboard' }}
+              </span>
+              <ChevronDown v-if="stores.length > 1" :size="14" class="text-slate-400" :class="{ 'rotate-180': showShopDropdown }" />
+            </button>
+            <!-- Dropdown -->
+            <Transition enter-active-class="transition-all duration-200 ease-out" enter-from-class="opacity-0 -translate-y-1" enter-to-class="opacity-100 translate-y-0"
+                        leave-active-class="transition-all duration-150 ease-in" leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 -translate-y-1">
+              <div v-if="showShopDropdown && stores.length > 1"
+                   class="absolute top-full left-0 mt-1 w-72 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
+                <button v-for="s in stores" :key="s.store_id"
+                        @click="handleSwitchStore(s.store_id)"
+                        class="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
+                        :class="{ 'bg-primary/5': s.store_id === activeStoreId }">
+                  <Store :size="16" :class="s.store_id === activeStoreId ? 'text-primary' : 'text-slate-400'" />
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{{ s.store_name }}</p>
+                    <p class="text-xs text-slate-400">{{ s.store_id }} · {{ s.role }}</p>
+                  </div>
+                  <span v-if="s.store_id === activeStoreId" class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Đang chọn</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <button @click="toggleDark"
@@ -90,12 +115,43 @@
 </template>
 
 <script setup>
-import { LayoutDashboard, ShoppingCart, Package, Wallet, BarChart3, HardDrive, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Store, Sun, Moon } from 'lucide-vue-next'
+import { LayoutDashboard, ShoppingCart, Package, Wallet, BarChart3, HardDrive, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Store, Sun, Moon, ChevronDown } from 'lucide-vue-next'
 
-const { user, logout } = useAuth()
+const { user, stores, activeStoreId, activeStoreName, logout, switchStore, loadStores } = useAuth()
 const colorMode = useColorMode()
 const sidebarOpen = ref(false)
 const collapsed = ref(false)
+const showShopDropdown = ref(false)
+const shopDropdownRef = ref(null)
+
+// Load stores on mount
+onMounted(() => {
+  loadStores()
+})
+
+const currentStoreName = computed(() => {
+  if (activeStoreName.value) return activeStoreName.value
+  const active = stores.value?.find(s => s.store_id === activeStoreId.value)
+  return active?.store_name || user.value?.display_name || 'Dashboard'
+})
+
+const handleSwitchStore = async (storeId) => {
+  if (storeId === activeStoreId.value) {
+    showShopDropdown.value = false
+    return
+  }
+  showShopDropdown.value = false
+  await switchStore(storeId)
+}
+
+// Close dropdown on click outside
+const onClickOutside = (e) => {
+  if (shopDropdownRef.value && !shopDropdownRef.value.contains(e.target)) {
+    showShopDropdown.value = false
+  }
+}
+onMounted(() => document.addEventListener('click', onClickOutside))
+onUnmounted(() => document.removeEventListener('click', onClickOutside))
 
 const toggleDark = () => {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
