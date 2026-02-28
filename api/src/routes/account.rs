@@ -48,9 +48,9 @@ fn normalize_phone(phone: &str) -> Option<String> {
 /// Migrate anonymous HWID data to account.
 /// When user registers/logs in with HWID, find any synced data under that HWID's
 /// old store entry and migrate it to the account's store_id (account_id + 1M).
-async fn migrate_hwid_data(pool: &PgPool, hwid: &str, account_id: i32) {
+async fn migrate_hwid_data(pool: &PgPool, hwid: &str, data_store_id: i32) {
     if hwid.is_empty() { return; }
-    let new_store_id = account_id + 1_000_000;
+    let new_store_id = data_store_id;
 
     // Find old store_id(s) linked to this HWID in the stores table
     let old_ids: Vec<(i32,)> = sqlx::query_as(
@@ -190,20 +190,20 @@ async fn register(
     .bind(if req.hwid.is_empty() { None } else { Some(&req.hwid) })
     .fetch_one(&state.pool).await?;
 
-    // Insert into account_stores
+    // Insert into account_stores with data_store_id
+    let data_store_id = user_id + 1_000_000;
     let _ = sqlx::query(
-        "INSERT INTO account_stores (account_id, store_id, store_name, role, is_default) VALUES ($1, $2, $3, 'owner', TRUE)"
-    ).bind(user_id).bind(&store_id).bind(&store_name).execute(&state.pool).await?;
+        "INSERT INTO account_stores (account_id, store_id, store_name, role, is_default, data_store_id) VALUES ($1, $2, $3, 'owner', TRUE, $4)"
+    ).bind(user_id).bind(&store_id).bind(&store_name).bind(data_store_id).execute(&state.pool).await?;
 
     // Auto-migrate anonymous HWID data to this new account
     if !req.hwid.is_empty() {
-        migrate_hwid_data(&state.pool, &req.hwid, user_id).await;
+        migrate_hwid_data(&state.pool, &req.hwid, data_store_id).await;
     }
 
-    // Generate JWT token
-    let jwt_store_id = user_id + 1_000_000;
-    let token = auth::create_token(user_id, jwt_store_id, "owner", &state.config.jwt_secret)?;
-    let refresh_token = auth::create_refresh_token(user_id, jwt_store_id, "owner", &state.config.jwt_secret)?;
+    // Generate JWT token using data_store_id
+    let token = auth::create_token(user_id, data_store_id, "owner", &state.config.jwt_secret)?;
+    let refresh_token = auth::create_refresh_token(user_id, data_store_id, "owner", &state.config.jwt_secret)?;
 
     tracing::info!("✅ New account registered: username={}, phone={}, store_id={}, user_id={}", username, phone_val, store_id, user_id);
 
@@ -215,7 +215,7 @@ async fn register(
         "token": token,
         "refresh_token": refresh_token,
         "user": { "id": user_id, "username": username, "display_name": store_name, "role": "owner" },
-        "stores": [{ "store_id": store_id, "store_name": store_name, "role": "owner", "is_default": true }],
+        "stores": [{ "store_id": store_id, "store_name": store_name, "role": "owner", "is_default": true, "data_store_id": data_store_id }],
         "message": "Đăng ký thành công"
     })))
 }
@@ -301,33 +301,36 @@ async fn login(
     if !req.hwid.is_empty() {
         let _ = sqlx::query("UPDATE accounts SET hwid = $1 WHERE id = $2")
             .bind(&req.hwid).bind(user_id).execute(&state.pool).await;
-        // Migrate any anonymous HWID data to this account
-        migrate_hwid_data(&state.pool, &req.hwid, user_id).await;
+        // Migrate any anonymous HWID data to this account's default store
+        let default_data_store_id = sqlx::query_scalar::<_, i32>(
+            "SELECT data_store_id FROM account_stores WHERE account_id = $1 AND is_default = TRUE LIMIT 1"
+        ).bind(user_id).fetch_optional(&state.pool).await?.unwrap_or(user_id + 1_000_000);
+        migrate_hwid_data(&state.pool, &req.hwid, default_data_store_id).await;
     }
 
     // Fetch stores for this account
-    let stores = sqlx::query_as::<_, (String, Option<String>, String, bool)>(
-        "SELECT store_id, store_name, role, is_default FROM account_stores WHERE account_id = $1 ORDER BY is_default DESC, created_at"
+    let stores = sqlx::query_as::<_, (String, Option<String>, String, bool, i32)>(
+        "SELECT store_id, store_name, role, is_default, data_store_id FROM account_stores WHERE account_id = $1 ORDER BY is_default DESC, created_at"
     ).bind(user_id).fetch_all(&state.pool).await?;
 
     // Find default store
     let default_store = stores.iter().find(|s| s.3).or(stores.first());
-    let (active_store_id, active_store_name) = match default_store {
-        Some(s) => (s.0.clone(), s.1.clone().unwrap_or_default()),
-        None => (_store_id.clone(), _store_name.clone()),
+    let (active_store_id, active_store_name, active_data_store_id) = match default_store {
+        Some(s) => (s.0.clone(), s.1.clone().unwrap_or_default(), s.4),
+        None => (_store_id.clone(), _store_name.clone(), user_id + 1_000_000),
     };
 
     let stores_json: Vec<Value> = stores.iter().map(|s| json!({
         "store_id": s.0,
         "store_name": s.1,
         "role": s.2,
-        "is_default": s.3
+        "is_default": s.3,
+        "data_store_id": s.4
     })).collect();
 
-    // Generate JWT with default store offset
-    let jwt_store_id = user_id + 1_000_000;
-    let token = auth::create_token(user_id, jwt_store_id, "owner", &state.config.jwt_secret)?;
-    let refresh_token = auth::create_refresh_token(user_id, jwt_store_id, "owner", &state.config.jwt_secret)?;
+    // Generate JWT with default store's data_store_id
+    let token = auth::create_token(user_id, active_data_store_id, "owner", &state.config.jwt_secret)?;
+    let refresh_token = auth::create_refresh_token(user_id, active_data_store_id, "owner", &state.config.jwt_secret)?;
 
     tracing::info!("✅ Account login: username={}, store_id={}, stores={}", actual_username, active_store_id, stores.len());
 
