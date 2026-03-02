@@ -122,6 +122,30 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <!-- Notification Bell -->
+          <div class="relative" ref="notifDropdownRef">
+            <button @click="showNotifPanel = !showNotifPanel; if(!notifLoaded) loadNotifs()"
+                    class="relative p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <Bell :size="18" />
+              <span v-if="notifCount > 0" class="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{{ notifCount > 9 ? '9+' : notifCount }}</span>
+            </button>
+            <Transition enter-active-class="transition-all duration-200 ease-out" enter-from-class="opacity-0 -translate-y-1" enter-to-class="opacity-100 translate-y-0"
+                        leave-active-class="transition-all duration-150 ease-in" leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 -translate-y-1">
+              <div v-if="showNotifPanel" class="absolute top-full right-0 mt-1 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                  <span class="text-sm font-bold text-slate-800 dark:text-white">🔔 Thông báo</span>
+                  <span class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full">{{ notifCount }}</span>
+                </div>
+                <div class="max-h-80 overflow-y-auto">
+                  <div v-if="notifItems.length === 0" class="px-4 py-8 text-center text-slate-400 text-sm">✅ Không có thông báo</div>
+                  <div v-for="(n, i) in notifItems" :key="i" class="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-50 dark:border-slate-700/30 last:border-0">
+                    <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ n.title }}</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ n.message }}</p>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
           <button @click="toggleDark"
                   class="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             <Sun v-if="$colorMode.value === 'dark'" :size="18" />
@@ -139,12 +163,12 @@
 </template>
 
 <script setup>
-import { LayoutDashboard, ShoppingCart, Package, Wallet, BarChart3, HardDrive, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Store, Sun, Moon, ChevronDown, Plus } from 'lucide-vue-next'
+import { LayoutDashboard, ShoppingCart, Package, Wallet, BarChart3, HardDrive, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Store, Sun, Moon, ChevronDown, Plus, Calculator, Truck, Users, Bell } from 'lucide-vue-next'
 
 const { user, stores, activeStoreId, activeStoreName, logout, switchStore, loadStores, createStore } = useAuth()
 const colorMode = useColorMode()
-const sidebarOpen = ref(false)
 const collapsed = ref(false)
+const sidebarOpen = ref(false)
 const showShopDropdown = ref(false)
 const shopDropdownRef = ref(null)
 const showCreateForm = ref(false)
@@ -152,9 +176,27 @@ const newStoreName = ref('')
 const creatingStore = ref(false)
 const createError = ref('')
 
-// Load stores on mount
+// Notifications
+const { fetchApi } = useAuth()
+const showNotifPanel = ref(false)
+const notifItems = ref([])
+const notifCount = ref(0)
+const notifLoaded = ref(false)
+const notifDropdownRef = ref(null)
+
+async function loadNotifs() {
+  try {
+    const r = await fetchApi('/api/dashboard/notifications')
+    notifItems.value = r.notifications || []
+    notifCount.value = r.count || 0
+    notifLoaded.value = true
+  } catch (e) { console.error(e) }
+}
+
+// Load stores and notifications on mount
 onMounted(() => {
   loadStores()
+  loadNotifs()
 })
 
 const currentStoreName = computed(() => {
@@ -208,8 +250,11 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Tổng quan', to: '/dashboard' },
   { icon: ShoppingCart, label: 'Đơn hàng', to: '/dashboard/don-hang' },
   { icon: Package, label: 'Tồn kho', to: '/dashboard/ton-kho' },
+  { icon: Truck, label: 'Nhập hàng', to: '/dashboard/nhap-hang' },
+  { icon: Users, label: 'Nhân viên', to: '/dashboard/nhan-vien' },
   { icon: Wallet, label: 'Công nợ', to: '/dashboard/cong-no' },
   { icon: BarChart3, label: 'Báo cáo', to: '/dashboard/bao-cao' },
+  { icon: Calculator, label: 'Kế toán & Thuế', to: '/dashboard/ke-toan' },
   { icon: HardDrive, label: 'Backup', to: '/dashboard/backup' },
   { icon: Settings, label: 'Cài đặt', to: '/dashboard/cai-dat' },
 ]

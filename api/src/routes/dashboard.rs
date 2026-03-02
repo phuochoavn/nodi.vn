@@ -1,7 +1,10 @@
 use axum::{Router, Json, extract::{State, Path, Query}, routing::{get, put}};
 use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Response};
+use axum::http::header;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use rust_xlsxwriter::{Workbook, Format, FormatAlign, Color};
 
 use crate::AppState;
 use crate::error::AppError;
@@ -34,6 +37,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/dashboard/reports/top-products", get(top_products))
         .route("/api/dashboard/settings", get(settings))
         .route("/api/dashboard/settings/password", put(change_password))
+        .route("/api/dashboard/purchase-orders", get(purchase_orders_list))
+        .route("/api/dashboard/employees", get(employees_list))
+        .route("/api/dashboard/inventory/export", get(inventory_export))
+        .route("/api/dashboard/notifications", get(notifications))
 }
 
 // ===== API 1: Overview =====
@@ -509,4 +516,239 @@ async fn change_password(
         .bind(&new_hash).bind(claims.sub).execute(&state.pool).await?;
 
     Ok(Json(json!({ "success": true })))
+}
+
+// ===== API 10: Purchase Orders =====
+#[derive(Deserialize)]
+struct PurchaseOrdersQuery {
+    store_id: Option<i32>,
+    page: Option<i32>,
+    limit: Option<i32>,
+    search: Option<String>,
+}
+
+async fn purchase_orders_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<PurchaseOrdersQuery>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = get_store_id(&claims, q.store_id);
+    let limit = q.limit.unwrap_or(50).min(200);
+    let offset = (q.page.unwrap_or(1) - 1).max(0) * limit;
+
+    let search_filter = q.search.as_deref().unwrap_or("");
+    let like_pattern = format!("%{}%", search_filter);
+
+    let rows = sqlx::query_as::<_, (i32, Option<String>, Option<f64>, Option<String>, Option<String>, Option<chrono::NaiveDateTime>, Option<String>)>(
+        "SELECT local_id, supplier_name, total_amount::float8, status, import_date, created_at, note \
+         FROM synced_purchase_orders WHERE store_id = $1 \
+         AND ($4 = '' OR LOWER(COALESCE(supplier_name,'')) LIKE LOWER($4)) \
+         ORDER BY created_at DESC NULLS LAST LIMIT $2 OFFSET $3"
+    ).bind(sid).bind(limit).bind(offset).bind(&like_pattern)
+    .fetch_all(&state.pool).await?;
+
+    let total: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM synced_purchase_orders WHERE store_id = $1 \
+         AND ($2 = '' OR LOWER(COALESCE(supplier_name,'')) LIKE LOWER($2))"
+    ).bind(sid).bind(&like_pattern).fetch_one(&state.pool).await.unwrap_or((0,));
+
+    let orders: Vec<Value> = rows.iter().map(|r| json!({
+        "id": r.0,
+        "supplier_name": r.1,
+        "total_amount": r.2.unwrap_or(0.0),
+        "status": r.3,
+        "import_date": r.4,
+        "created_at": r.5.map(|d| d.to_string()),
+        "note": r.6,
+    })).collect();
+
+    Ok(Json(json!({
+        "purchase_orders": orders,
+        "total": total.0,
+        "page": q.page.unwrap_or(1),
+        "limit": limit,
+    })))
+}
+
+// ===== API 11: Employees =====
+#[derive(Deserialize)]
+struct EmployeesQuery {
+    store_id: Option<i32>,
+}
+
+async fn employees_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<EmployeesQuery>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = get_store_id(&claims, q.store_id);
+
+    let rows = sqlx::query_as::<_, (i32, String, Option<String>, String, bool, Option<chrono::NaiveDateTime>)>(
+        "SELECT id, name, phone, role, is_active, created_at FROM employees \
+         WHERE store_id = $1 ORDER BY created_at DESC"
+    ).bind(sid).fetch_all(&state.pool).await?;
+
+    let employees: Vec<Value> = rows.iter().map(|r| json!({
+        "id": r.0,
+        "name": r.1,
+        "phone": r.2,
+        "role": r.3,
+        "is_active": r.4,
+        "created_at": r.5.map(|d| d.to_string()),
+    })).collect();
+
+    Ok(Json(json!({
+        "employees": employees,
+        "total": employees.len(),
+    })))
+}
+
+// ===== API 12: Product Inventory Export (Excel) =====
+#[derive(Deserialize)]
+struct ExportQuery {
+    store_id: Option<i32>,
+}
+
+async fn inventory_export(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<ExportQuery>,
+) -> Result<Response, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = get_store_id(&claims, q.store_id);
+
+    let rows = sqlx::query_as::<_, (Option<String>, Option<String>, Option<f64>, Option<String>, Option<f64>, Option<f64>, Option<String>)>(
+        "SELECT name, category, stock_quantity::float8, base_unit, cost_price::float8, sell_price::float8, expiry_date \
+         FROM synced_products WHERE store_id = $1 ORDER BY name"
+    ).bind(sid).fetch_all(&state.pool).await?;
+
+    let mut wb = Workbook::new();
+    let sheet = wb.add_worksheet();
+    sheet.set_name("Tồn kho").ok();
+
+    // Header format
+    let hdr_fmt = Format::new()
+        .set_bold()
+        .set_background_color(Color::RGB(0x2563EB))
+        .set_font_color(Color::White)
+        .set_align(FormatAlign::Center);
+
+    let money_fmt = Format::new()
+        .set_num_format("#,##0")
+        .set_align(FormatAlign::Right);
+
+    let num_fmt = Format::new()
+        .set_align(FormatAlign::Right);
+
+    let headers_list = ["Tên sản phẩm", "Danh mục", "Tồn kho", "ĐVT", "Giá vốn", "Giá bán", "HSD"];
+    let widths = [30.0, 15.0, 10.0, 8.0, 15.0, 15.0, 12.0];
+    for (c, h) in headers_list.iter().enumerate() {
+        sheet.write_string_with_format(0, c as u16, *h, &hdr_fmt).ok();
+        sheet.set_column_width(c as u16, widths[c]).ok();
+    }
+
+    for (i, r) in rows.iter().enumerate() {
+        let row = (i + 1) as u32;
+        sheet.write_string(row, 0, r.0.as_deref().unwrap_or("")).ok();
+        sheet.write_string(row, 1, r.1.as_deref().unwrap_or("")).ok();
+        sheet.write_number_with_format(row, 2, r.2.unwrap_or(0.0), &num_fmt).ok();
+        sheet.write_string(row, 3, r.3.as_deref().unwrap_or("")).ok();
+        sheet.write_number_with_format(row, 4, r.4.unwrap_or(0.0), &money_fmt).ok();
+        sheet.write_number_with_format(row, 5, r.5.unwrap_or(0.0), &money_fmt).ok();
+        sheet.write_string(row, 6, r.6.as_deref().unwrap_or("")).ok();
+    }
+
+    let buf = wb.save_to_buffer()
+        .map_err(|e| AppError::Internal(format!("Excel error: {}", e)))?;
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".to_string()),
+            (header::CONTENT_DISPOSITION, "attachment; filename=\"ton-kho.xlsx\"".to_string()),
+        ],
+        buf,
+    ).into_response())
+}
+
+// ===== API 13: Computed Notifications =====
+#[derive(Deserialize)]
+struct NotifQuery {
+    store_id: Option<i32>,
+}
+
+async fn notifications(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<NotifQuery>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = get_store_id(&claims, q.store_id);
+    let mut notifs: Vec<Value> = Vec::new();
+
+    // 1. Low stock products
+    let low_stock = sqlx::query_as::<_, (Option<String>, Option<f64>, Option<i32>)>(
+        "SELECT name, stock_quantity::float8, min_stock FROM synced_products \
+         WHERE store_id = $1 AND stock_quantity <= COALESCE(min_stock, 5) \
+         ORDER BY stock_quantity ASC LIMIT 10"
+    ).bind(sid).fetch_all(&state.pool).await.unwrap_or_default();
+
+    for r in &low_stock {
+        notifs.push(json!({
+            "type": "LOW_STOCK", "severity": "warning",
+            "title": format!("⚠️ {} sắp hết hàng", r.0.as_deref().unwrap_or("?")),
+            "message": format!("Còn {} sản phẩm (tối thiểu: {})", r.1.unwrap_or(0.0) as i64, r.2.unwrap_or(5)),
+        }));
+    }
+
+    // 2. Expiring products (within 30 days)
+    let expiring = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT name, expiry_date FROM synced_products \
+         WHERE store_id = $1 AND expiry_date IS NOT NULL \
+         AND expiry_date::date <= CURRENT_DATE + INTERVAL '30 days' \
+         AND expiry_date::date >= CURRENT_DATE \
+         ORDER BY expiry_date ASC LIMIT 10"
+    ).bind(sid).fetch_all(&state.pool).await.unwrap_or_default();
+
+    for r in &expiring {
+        notifs.push(json!({
+            "type": "EXPIRING", "severity": "error",
+            "title": format!("🔴 {} sắp hết hạn", r.0.as_deref().unwrap_or("?")),
+            "message": format!("HSD: {}", r.1.as_deref().unwrap_or("?")),
+        }));
+    }
+
+    // 3. Customer debts > 0
+    let cust_debt: (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(debt_amount)::bigint, 0) FROM synced_customers \
+         WHERE store_id = $1 AND debt_amount > 0"
+    ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
+
+    if cust_debt.0 > 0 {
+        notifs.push(json!({
+            "type": "DEBT", "severity": "info",
+            "title": "💰 Công nợ khách hàng",
+            "message": format!("Tổng: {}đ chưa thu", cust_debt.0),
+        }));
+    }
+
+    // 4. Supplier debts > 0
+    let sup_debt: (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(debt_amount)::bigint, 0) FROM synced_suppliers \
+         WHERE store_id = $1 AND debt_amount > 0"
+    ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
+
+    if sup_debt.0 > 0 {
+        notifs.push(json!({
+            "type": "DEBT", "severity": "info",
+            "title": "📦 Công nợ nhà cung cấp",
+            "message": format!("Tổng: {}đ chưa trả", sup_debt.0),
+        }));
+    }
+
+    Ok(Json(json!({
+        "notifications": notifs,
+        "count": notifs.len(),
+    })))
 }

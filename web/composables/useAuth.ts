@@ -92,14 +92,31 @@ export const useAuth = () => {
         return res
     }
 
-    const fetchApi = (url, opts = {}) => {
-        return $fetch(url, {
-            ...opts,
-            headers: {
-                ...opts.headers,
-                Authorization: `Bearer ${token.value}`,
-            },
-        })
+    const fetchApi = async (url, opts = {}) => {
+        const { error: showError } = useToast()
+        try {
+            return await $fetch(url, {
+                ...opts,
+                headers: {
+                    ...opts.headers,
+                    Authorization: `Bearer ${token.value}`,
+                },
+            })
+        } catch (e: any) {
+            // Auto-redirect to login on 401 (token expired)
+            if (e?.response?.status === 401 || e?.status === 401 || e?.statusCode === 401) {
+                token.value = null
+                user.value = null
+                const storesCookie = useCookie('nodi_stores', { maxAge: 86400 })
+                storesCookie.value = null
+                showError('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.')
+                navigateTo('/login')
+            } else {
+                const msg = e?.data?.message || e?.message || 'Lỗi kết nối server'
+                showError(msg)
+            }
+            throw e
+        }
     }
 
     return { token, user, stores, activeStoreId, activeStoreName, isAuthenticated, login, logout, switchStore, loadStores, refreshStores, createStore, fetchApi }

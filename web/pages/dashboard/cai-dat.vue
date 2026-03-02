@@ -67,20 +67,12 @@ async function changePassword() {
 </script>
 
 <style scoped>
-.page-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 24px; }
-.card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.06); }
-.card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
 .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.info-row { padding: 8px 0; }
+.info-row { padding: 8px 0; color: #1E293B; }
 .info-label { font-weight: 600; color: #64748B; }
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.95rem; }
-.form-group input {
-  width: 100%; max-width: 400px; padding: 12px 16px;
-  border: 1px solid #E2E8F0; border-radius: 10px; font-size: 1rem; font-family: inherit;
-}
-.form-group input:focus { outline: none; border-color: #2563EB; box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1); }
 .success-msg { color: #10B981; margin-bottom: 12px; }
 .error-msg { color: #EF4444; margin-bottom: 12px; }
+:root.dark .info-row { color: #E2E8F0; }
+:root.dark .info-label { color: #94A3B8; }
 @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr; } }
 </style>

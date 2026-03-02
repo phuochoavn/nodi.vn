@@ -3,7 +3,7 @@
     <div class="login-bg"></div>
     <div class="login-card">
       <div class="login-logo">
-        <span>🌾</span>
+        <img src="/favicon.svg" class="logo-img" alt="Nodi POS" />
         <h1>Nodi<span class="accent">POS</span></h1>
       </div>
       <p class="login-subtitle">Đăng nhập vào Dashboard</p>
@@ -30,7 +30,8 @@
       </form>
 
       <div class="login-links">
-        <a href="#" @click.prevent="alert('Liên hệ Zalo 0374.222.326 để reset mật khẩu')" class="forgot">Quên mật khẩu?</a>
+        <a href="#" @click.prevent="showForgot = !showForgot" class="forgot">Quên mật khẩu?</a>
+        <p v-if="showForgot" class="forgot-info">📞 Liên hệ Zalo <strong>0374.222.326</strong> để được hỗ trợ reset mật khẩu</p>
       </div>
       <p class="login-help">
         Chưa có tài khoản? <NuxtLink to="/register" class="register-link">Đăng ký miễn phí →</NuxtLink>
@@ -49,6 +50,7 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const showPw = ref(false)
+const showForgot = ref(false)
 
 onMounted(() => {
   if (isAuthenticated.value) navigateTo('/dashboard')
@@ -100,6 +102,7 @@ async function handleLogin() {
   margin-bottom: 8px;
 }
 .login-logo span { font-size: 2.5rem; }
+.logo-img { width: 56px; height: 56px; margin: 0 auto 8px; display: block; }
 .login-logo h1 { font-size: 1.8rem; font-weight: 800; margin-top: 8px; }
 .login-logo .accent { color: #10B981; }
 .login-subtitle {
@@ -151,6 +154,10 @@ async function handleLogin() {
   color: #64748B; font-size: 0.9rem; cursor: pointer;
 }
 .forgot:hover { color: #2563EB; }
+.forgot-info {
+  margin-top: 10px; padding: 10px 16px; background: #EFF6FF;
+  border-radius: 8px; font-size: 0.85rem; color: #1D4ED8;
+}
 .login-help {
   text-align: center; margin-top: 12px; color: #64748B; font-size: 0.9rem;
 }

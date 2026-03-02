@@ -50,20 +50,7 @@ function fmt(v) { return new Intl.NumberFormat('vi-VN').format(v || 0) + 'đ' }
 </script>
 
 <style scoped>
-.page-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 24px; }
-.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-.tabs button {
-  padding: 10px 24px; border: 1px solid #E2E8F0; border-radius: 10px;
-  background: white; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 0.95rem;
-}
-.tabs button.active { background: #2563EB; color: white; border-color: #2563EB; }
-.total-debt { margin-bottom: 16px; font-size: 1.1rem; }
+.total-debt { margin-bottom: 16px; font-size: 1.1rem; color: #1E293B; }
 .debt-amount { color: #EF4444; font-weight: 700; }
-.table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; }
-.data-table th { text-align: left; padding: 12px; font-weight: 600; color: #64748B; font-size: 0.85rem; border-bottom: 2px solid #E2E8F0; }
-.data-table td { padding: 12px; border-bottom: 1px solid #F1F5F9; }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
-.empty { text-align: center; color: #94A3B8; padding: 32px !important; }
-.card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.06); }
+:root.dark .total-debt { color: #E2E8F0; }
 </style>

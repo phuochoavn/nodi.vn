@@ -52,19 +52,10 @@ function formatCurrency(v) { return new Intl.NumberFormat('vi-VN').format(v || 0
 </script>
 
 <style scoped>
-.page-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 24px; }
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px; }
-.card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.06); }
-.card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
 .big-number { font-size: 2rem; font-weight: 800; color: #2563EB; }
 .sub-stat { color: #64748B; margin-top: 4px; }
 .sync-time { font-size: 1.1rem; font-weight: 600; color: #1E293B; }
 .sync-ok { color: #10B981; margin-top: 8px; }
 .sync-warn { color: #F59E0B; margin-top: 8px; }
-@media (max-width: 1024px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 768px) {
-  .stats-grid { grid-template-columns: 1fr; }
-  .dashboard-grid { grid-template-columns: 1fr; }
-}
+:root.dark .sync-time { color: #E2E8F0; }
 </style>

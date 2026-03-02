@@ -1,6 +1,11 @@
 <template>
   <div>
-    <h2 class="page-title">📦 Tồn kho</h2>
+    <div class="page-header">
+      <h2 class="page-title">📦 Tồn kho</h2>
+      <button class="btn-export" @click="exportExcel" :disabled="exporting">
+        {{ exporting ? '⏳ Đang xuất...' : '📥 Xuất Excel' }}
+      </button>
+    </div>
     <div class="filters">
       <input v-model="search" type="text" placeholder="🔍 Tìm sản phẩm..." @input="debounceLoad">
       <select v-model="filter" @change="load()">
@@ -40,7 +45,8 @@
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 useHead({ title: 'Tồn kho — Dashboard' })
 
-const { fetchApi } = useAuth()
+const { fetchApi, token } = useAuth()
+const { success, error: showError } = useToast()
 const products = ref([])
 const total = ref(0)
 const lowCount = ref(0)
@@ -48,6 +54,7 @@ const page = ref(1)
 const limit = 50
 const search = ref('')
 const filter = ref('')
+const exporting = ref(false)
 let timer = null
 
 async function load() {
@@ -60,24 +67,39 @@ async function load() {
 function debounceLoad() { clearTimeout(timer); timer = setTimeout(load, 300) }
 onMounted(load)
 function fmt(v) { return new Intl.NumberFormat('vi-VN').format(v || 0) + 'đ' }
+
+async function exportExcel() {
+  exporting.value = true
+  try {
+    const res = await fetch('/api/dashboard/inventory/export', {
+      headers: { Authorization: `Bearer ${token.value}` }
+    })
+    if (!res.ok) throw new Error('Export failed')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'ton-kho.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+    success('Đã xuất file Excel!')
+  } catch (e) {
+    showError('Không thể xuất Excel: ' + (e.message || 'Lỗi'))
+  }
+  exporting.value = false
+}
 </script>
 
 <style scoped>
-.page-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 24px; }
-.filters { display: flex; gap: 12px; margin-bottom: 16px; }
-.filters input, .filters select {
-  padding: 10px 16px; border: 1px solid #E2E8F0; border-radius: 10px; font-size: 0.95rem; font-family: inherit;
-}
-.filters input { flex: 1; }
-.table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; }
-.data-table th { text-align: left; padding: 12px; font-weight: 600; color: #64748B; font-size: 0.85rem; border-bottom: 2px solid #E2E8F0; }
-.data-table td { padding: 12px; border-bottom: 1px solid #F1F5F9; }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
 .low-stock { color: #EF4444; font-weight: 700; }
-.empty { text-align: center; color: #94A3B8; padding: 32px !important; }
-.pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 16px; }
-.pagination button { padding: 8px 16px; border: 1px solid #E2E8F0; border-radius: 8px; background: white; cursor: pointer; }
-.pagination button:disabled { opacity: 0.4; }
-.card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.06); }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+.btn-export {
+  padding: 8px 18px; border: none; border-radius: 8px;
+  background: linear-gradient(135deg, #10B981, #059669); color: white;
+  font-weight: 600; font-size: 0.9rem; cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn-export:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.3); }
+.btn-export:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+:root.dark .btn-export { background: linear-gradient(135deg, #059669, #047857); }
 </style>

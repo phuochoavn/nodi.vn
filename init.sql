@@ -116,3 +116,25 @@ CREATE INDEX idx_stores_license_key ON stores(license_key);
 
 -- Admin user (tạo sau khi có password hash)
 -- INSERT INTO users (phone, password_hash, role) VALUES ('admin_phone', 'hash', 'admin');
+
+-- E-Invoice & Tax Config tables (Sprint: Kế toán & Thuế)
+CREATE TABLE IF NOT EXISTS einvoice_config (
+    store_id INTEGER PRIMARY KEY,
+    provider VARCHAR(50) DEFAULT 'none',
+    api_key VARCHAR(500),
+    api_secret VARCHAR(500),
+    tax_code VARCHAR(20),
+    series_symbol VARCHAR(20),
+    is_active BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tax_config (
+    store_id INTEGER PRIMARY KEY,
+    business_type VARCHAR(50) DEFAULT 'retail',
+    vat_rate NUMERIC(5,2) DEFAULT 1.0,
+    pit_rate NUMERIC(5,2) DEFAULT 0.5,
+    tax_period VARCHAR(20) DEFAULT 'quarterly',
+    updated_at TIMESTAMP DEFAULT NOW()
+);

@@ -22,6 +22,64 @@
 
 ---
 
+## 2026-03-02 (Sprint 53 — Feature Gap Hardening)
+
+> **Mục tiêu:** Đánh giá toàn diện hệ thống dashboard và sửa 11 gaps (P0 → P2)  
+> **Kết quả:** 11/11 hoàn thành, score ↑ từ 5.2/10
+
+### 🔒 SECURITY — P0 Critical Fixes
+
+- **401 Auto-redirect:** Khi token hết hạn → clear cookie → toast → redirect `/login`
+  - Files: `web/composables/useAuth.ts`
+- **Rate Limiting:** `tower-governor` 0.8 với Axum 0.8 (50 req/sec/IP, burst 100)
+  - Files: `api/src/main.rs`, `api/Cargo.toml`
+- **Automated DB Backup:** Script `pg_dump` chạy cron 2AM daily, giữ 14 ngày
+  - Files: `scripts/backup_db.sh`
+
+### 🔧 REFACTOR — CSS Cleanup
+
+- Loại bỏ ~40 dòng CSS trùng lặp trong `ke-toan.vue` (dùng global classes)
+  - Files: `web/pages/dashboard/ke-toan.vue`
+
+### ✨ FEAT — P1 Major Features
+
+- **Chart.js Reports:** Viết lại trang Báo cáo với line chart (doanh thu) + bar chart (top 10 SP)
+  - Files: `web/pages/dashboard/bao-cao.vue`
+- **Purchase Orders Page:** Trang Nhập hàng mới: bảng dữ liệu, search, pagination, status badges
+  - Files: `web/pages/dashboard/nhap-hang.vue`, `api/src/routes/dashboard.rs`
+  - API: `GET /api/dashboard/purchase-orders`
+- **Employees Page:** Trang Nhân viên: stats summary, avatar, role badges, trạng thái
+  - Files: `web/pages/dashboard/nhan-vien.vue`, `api/src/routes/dashboard.rs`
+  - API: `GET /api/dashboard/employees`
+- **Sidebar Navigation:** Thêm 📦 Nhập hàng + 👥 Nhân viên vào sidebar
+  - Files: `web/layouts/dashboard.vue`
+
+### ✨ FEAT — P2 Nice-to-Have
+
+- **Toast Notifications:** Hệ thống toast toàn cục (4 types, auto-dismiss, dark mode)
+  - Files: `web/composables/useToast.ts`, `web/components/ToastContainer.vue`, `web/app.vue`
+  - Tự động hiện toast khi API lỗi (tích hợp vào `fetchApi`)
+- **Product Excel Export:** Nút "📥 Xuất Excel" trên trang Tồn kho
+  - Files: `web/pages/dashboard/ton-kho.vue`, `api/src/routes/dashboard.rs`
+  - API: `GET /api/dashboard/inventory/export` (rust_xlsxwriter, formatted xlsx)
+- **Notification Bell:** 🔔 Icon chuông trên header với badge đỏ + dropdown panel
+  - Thông báo tự động: sản phẩm sắp hết, sắp hết hạn, công nợ KH/NCC
+  - Files: `web/layouts/dashboard.vue`, `api/src/routes/dashboard.rs`
+  - API: `GET /api/dashboard/notifications`
+
+### 📊 Tổng kết Sprint 53
+
+| Mức độ | Items | Status |
+|--------|-------|--------|
+| P0 Critical | 4 | ✅ |
+| P1 Major | 4 | ✅ |
+| P2 Nice | 3 | ✅ |
+| **Tổng** | **11** | **✅ 100%** |
+
+**New APIs:** 4 endpoints | **New Files:** 5 | **Modified Files:** 6
+
+---
+
 ## 2026-02-24
 
 ### 🎨 UI — Redesign Logo SVG

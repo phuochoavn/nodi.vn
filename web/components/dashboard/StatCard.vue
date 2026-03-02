@@ -2,7 +2,8 @@
   <div class="card flex items-center gap-4 p-5">
     <div class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
          :class="colorClasses">
-      <component :is="iconComponent" :size="22" />
+      <span v-if="isEmoji" class="text-2xl leading-none">{{ icon }}</span>
+      <component v-else :is="iconComponent" :size="22" />
     </div>
     <div class="flex-1 min-w-0">
       <span class="block text-sm text-[var(--text-muted)] mb-0.5">{{ label }}</span>
@@ -12,7 +13,7 @@
 </template>
 
 <script setup>
-import { DollarSign, ShoppingCart, Package, Wallet } from 'lucide-vue-next'
+import { DollarSign, ShoppingCart, Package, Wallet, Users, Factory, Landmark, AlertTriangle } from 'lucide-vue-next'
 
 const props = defineProps({
   icon: String,
@@ -27,8 +28,14 @@ const iconMap = {
   'shopping-cart': ShoppingCart,
   'package': Package,
   'wallet': Wallet,
+  'users': Users,
+  'factory': Factory,
+  'landmark': Landmark,
+  'alert-triangle': AlertTriangle,
 }
 
+// Check if the icon is an emoji (not found in iconMap)
+const isEmoji = computed(() => !iconMap[props.icon])
 const iconComponent = computed(() => iconMap[props.icon] || DollarSign)
 
 const colorMap = {

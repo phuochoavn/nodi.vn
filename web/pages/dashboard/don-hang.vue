@@ -75,24 +75,6 @@ function fmt(v) { return new Intl.NumberFormat('vi-VN').format(v || 0) + 'đ' }
 </script>
 
 <style scoped>
-.page-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 24px; }
-.table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; }
-.data-table th { text-align: left; padding: 12px; font-weight: 600; color: #64748B; font-size: 0.85rem; border-bottom: 2px solid #E2E8F0; }
-.data-table td { padding: 12px; border-bottom: 1px solid #F1F5F9; }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
-.clickable { cursor: pointer; transition: background 0.2s; }
-.clickable:hover { background: #F8FAFC; }
-.empty { text-align: center; color: #94A3B8; padding: 32px !important; }
-.badge { padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
-.badge.CASH { background: #DCFCE7; color: #166534; }
-.badge.TRANSFER { background: #DBEAFE; color: #1E40AF; }
-.badge.DEBT { background: #FEF3C7; color: #92400E; }
-.pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 16px; }
-.pagination button { padding: 8px 16px; border: 1px solid #E2E8F0; border-radius: 8px; background: white; cursor: pointer; }
-.pagination button:disabled { opacity: 0.4; cursor: default; }
-.total { margin-top: 16px; font-size: 1.1rem; text-align: right; }
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; }
-.modal { max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 32px; }
-.card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.06); }
+.total { margin-top: 16px; font-size: 1.1rem; text-align: right; color: #1E293B; }
+:root.dark .total { color: #E2E8F0; }
 </style>

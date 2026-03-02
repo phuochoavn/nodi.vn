@@ -2,6 +2,7 @@ use axum::Router;
 use tower_http::cors::CorsLayer;
 use axum::http::{HeaderValue, Method, header};
 use tower_http::trace::TraceLayer;
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -77,6 +78,13 @@ async fn main() {
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT, header::ORIGIN])
         .allow_credentials(true);
 
+    // Rate limiting: 50 req/sec per IP with burst of 100
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(50)
+        .burst_size(100)
+        .finish()
+        .unwrap();
+
     let app = Router::new()
         .merge(routes::health::router())
         .merge(routes::license::router())
@@ -92,15 +100,18 @@ async fn main() {
         .merge(routes::support::router())
         .merge(routes::ws_support::router())
         .merge(routes::store::router())
+        .merge(routes::accounting::router())
+        .merge(routes::einvoice::router())
         .layer(axum::middleware::from_fn(security_headers))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB
+        .layer(GovernorLayer::new(governor_conf))
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::info!("🚀 Nodi API listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
 }
