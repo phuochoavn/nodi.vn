@@ -38,7 +38,9 @@ pub fn router() -> Router<AppState> {
         .route("/api/dashboard/settings", get(settings))
         .route("/api/dashboard/settings/password", put(change_password))
         .route("/api/dashboard/purchase-orders", get(purchase_orders_list))
-        .route("/api/dashboard/employees", get(employees_list))
+        .route("/api/dashboard/staff", get(staff_list))
+        .route("/api/dashboard/staff/{id}/permissions", put(staff_update_permissions))
+        .route("/api/dashboard/staff/{id}/toggle-active", put(staff_toggle_active))
         .route("/api/dashboard/inventory/export", get(inventory_export))
         .route("/api/dashboard/notifications", get(notifications))
 }
@@ -571,38 +573,112 @@ async fn purchase_orders_list(
     })))
 }
 
-// ===== API 11: Employees =====
+// ===== API 11: Staff Members =====
 #[derive(Deserialize)]
-struct EmployeesQuery {
+struct StaffQuery {
     store_id: Option<i32>,
 }
 
-async fn employees_list(
+async fn staff_list(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(q): Query<EmployeesQuery>,
+    Query(q): Query<StaffQuery>,
 ) -> Result<Json<Value>, AppError> {
     let claims = extract_claims(&headers, &state.config.jwt_secret)?;
     let sid = get_store_id(&claims, q.store_id);
 
-    let rows = sqlx::query_as::<_, (i32, String, Option<String>, String, bool, Option<chrono::NaiveDateTime>)>(
-        "SELECT id, name, phone, role, is_active, created_at FROM employees \
-         WHERE store_id = $1 ORDER BY created_at DESC"
+    let rows = sqlx::query_as::<_, (i64, String, String, String, Option<String>, Value, bool, Option<chrono::NaiveDateTime>)>(
+        "SELECT id, username, display_name, role, pin, permissions, is_active, created_at \
+         FROM sync_staff_members WHERE store_id = $1 ORDER BY role DESC, created_at ASC"
     ).bind(sid).fetch_all(&state.pool).await?;
 
-    let employees: Vec<Value> = rows.iter().map(|r| json!({
+    let staff: Vec<Value> = rows.iter().map(|r| json!({
         "id": r.0,
-        "name": r.1,
-        "phone": r.2,
+        "username": r.1,
+        "display_name": r.2,
         "role": r.3,
-        "is_active": r.4,
-        "created_at": r.5.map(|d| d.to_string()),
+        "pin_set": r.4.is_some() && !r.4.as_deref().unwrap_or("").is_empty(),
+        "permissions": r.5,
+        "is_active": r.6,
+        "created_at": r.7.map(|d| d.to_string()),
     })).collect();
 
     Ok(Json(json!({
-        "employees": employees,
-        "total": employees.len(),
+        "staff": staff,
+        "total": staff.len(),
     })))
+}
+
+// ===== API 11b: Update Staff Permissions =====
+#[derive(Deserialize)]
+struct PermissionsPayload {
+    permissions: Value,
+}
+
+async fn staff_update_permissions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(body): Json<PermissionsPayload>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = claims.store_id;
+
+    // Verify staff member exists and belongs to this store
+    let exists = sqlx::query_as::<_, (String,)>(
+        "SELECT role FROM sync_staff_members WHERE store_id = $1 AND id = $2"
+    ).bind(sid).bind(id).fetch_optional(&state.pool).await?;
+
+    match exists {
+        None => return Err(AppError::NotFound("Staff member not found".into())),
+        Some((role,)) if role == "owner" => {
+            return Err(AppError::BadRequest("Cannot modify owner permissions".into()));
+        }
+        _ => {}
+    }
+
+    sqlx::query(
+        "UPDATE sync_staff_members SET permissions = $1, updated_at = NOW() \
+         WHERE store_id = $2 AND id = $3"
+    ).bind(&body.permissions).bind(sid).bind(id).execute(&state.pool).await?;
+
+    Ok(Json(json!({
+        "success": true,
+        "message": "Cập nhật quyền thành công"
+    })))
+}
+
+// ===== API 11c: Toggle Staff Active =====
+async fn staff_toggle_active(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = claims.store_id;
+
+    let row = sqlx::query_as::<_, (String, bool)>(
+        "SELECT role, is_active FROM sync_staff_members WHERE store_id = $1 AND id = $2"
+    ).bind(sid).bind(id).fetch_optional(&state.pool).await?;
+
+    match row {
+        None => return Err(AppError::NotFound("Staff member not found".into())),
+        Some((role, _)) if role == "owner" => {
+            return Err(AppError::BadRequest("Cannot deactivate owner".into()));
+        }
+        Some((_, current)) => {
+            sqlx::query(
+                "UPDATE sync_staff_members SET is_active = $1, updated_at = NOW() \
+                 WHERE store_id = $2 AND id = $3"
+            ).bind(!current).bind(sid).bind(id).execute(&state.pool).await?;
+
+            Ok(Json(json!({
+                "success": true,
+                "is_active": !current,
+                "message": if !current { "Đã kích hoạt nhân viên" } else { "Đã vô hiệu hóa nhân viên" }
+            })))
+        }
+    }
 }
 
 // ===== API 12: Product Inventory Export (Excel) =====

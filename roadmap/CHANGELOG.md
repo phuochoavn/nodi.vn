@@ -22,7 +22,34 @@
 
 ---
 
+## 2026-03-03 (Sprint 89 — Staff Permission Management)
+
+> **Mục tiêu:** Đồng bộ nhân viên từ desktop + quản lý quyền từ xa trên web dashboard  
+> **Kết quả:** 6/6 items hoàn thành
+
+### 🗃️ DB — PostgreSQL Migration
+- `sync_staff_members` table: composite PK `(store_id, id)`, JSONB permissions, 3 indexes
+
+### ✨ FEAT — Sync Handler (Collection #15)
+- `SyncStaffMember` struct + `staff_members` field trong `SyncPayload`
+- Upsert vào `sync_staff_members` với `ON CONFLICT (store_id, id) DO UPDATE`
+- PIN `TEXT` lưu nhưng không bao giờ expose qua web API
+
+### ✨ FEAT — Dashboard Staff API (3 endpoints)
+- `GET /api/dashboard/staff` — danh sách nhân viên (trả `pin_set: bool`, không lộ PIN)
+- `PUT /api/dashboard/staff/:id/permissions` — cập nhật 9 cờ quyền (chặn sửa owner)
+- `PUT /api/dashboard/staff/:id/toggle-active` — bật/tắt nhân viên (chặn tắt owner)
+
+### 🎨 UI — Staff Management Page
+- Viết lại `/dashboard/nhan-vien` hoàn toàn
+- Bảng nhân viên: avatar, role badge, trạng thái, PIN, số quyền (x/9)
+- Modal phân quyền: 9 toggle switches với nhãn tiếng Việt
+- Skeleton loading, empty state, dark mode
+
+---
+
 ## 2026-03-02 (Sprint 53 — Feature Gap Hardening)
+
 
 > **Mục tiêu:** Đánh giá toàn diện hệ thống dashboard và sửa 11 gaps (P0 → P2)  
 > **Kết quả:** 11/11 hoàn thành, score ↑ từ 5.2/10

@@ -27,6 +27,7 @@ pub struct SyncPayload {
     #[serde(default)] pub payment_vouchers: Vec<SyncPaymentVoucher>,
     pub store_settings: Option<SyncStoreSettings>,
     #[serde(default)] pub product_transactions: Vec<SyncProductTransaction>,
+    #[serde(default)] pub staff_members: Vec<SyncStaffMember>,
 }
 
 #[derive(Deserialize)]
@@ -171,6 +172,18 @@ pub struct SyncProductTransaction {
     pub transaction_type: Option<String>, pub quantity: Option<f64>,
     pub reference_type: Option<String>, pub reference_id: Option<i64>,
     pub note: Option<String>, pub balance_after: Option<f64>,
+    pub created_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SyncStaffMember {
+    pub id: i64,
+    pub username: Option<String>,
+    pub display_name: Option<String>,
+    pub role: Option<String>,
+    pub pin: Option<String>,
+    pub permissions: Option<String>,
+    pub is_active: Option<bool>,
     pub created_at: Option<String>,
 }
 
@@ -402,6 +415,30 @@ async fn handle_sync(
             .execute(&mut *tx).await?;
     }
     counts.insert("product_transactions".into(), json!(payload.product_transactions.len()));
+
+    // 15. Staff Members (desktop users table)
+    for sm in &payload.staff_members {
+        let perms_json: Value = sm.permissions.as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(json!({}));
+        sqlx::query(
+            "INSERT INTO sync_staff_members (store_id,id,username,display_name,role,pin,permissions,is_active,created_at,updated_at,synced_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz,NOW(),NOW()) \
+             ON CONFLICT (store_id,id) DO UPDATE SET \
+             username=EXCLUDED.username,display_name=EXCLUDED.display_name,role=EXCLUDED.role,\
+             pin=EXCLUDED.pin,permissions=EXCLUDED.permissions,is_active=EXCLUDED.is_active,\
+             updated_at=NOW(),synced_at=NOW()"
+        )
+            .bind(store_id).bind(sm.id).bind(sm.username.as_deref().unwrap_or(""))
+            .bind(sm.display_name.as_deref().unwrap_or(""))
+            .bind(sm.role.as_deref().unwrap_or("staff"))
+            .bind(&sm.pin)
+            .bind(perms_json)
+            .bind(sm.is_active.unwrap_or(true))
+            .bind(&sm.created_at)
+            .execute(&mut *tx).await?;
+    }
+    counts.insert("staff_members".into(), json!(payload.staff_members.len()));
 
     tx.commit().await?;
 
