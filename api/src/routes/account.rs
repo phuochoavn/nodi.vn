@@ -244,16 +244,16 @@ async fn login(
     }
 
     // Find account by username OR phone
-    let account = sqlx::query_as::<_, (i32, String, String, String, String, String, bool, i32, Option<chrono::NaiveDateTime>)>(
+    let account = sqlx::query_as::<_, (i32, String, String, String, String, String, bool, i32, Option<chrono::NaiveDateTime>, String)>(
         "SELECT id, username, password_hash, display_name, store_name, store_id, is_active, \
-         COALESCE(failed_login_attempts, 0), locked_until \
+         COALESCE(failed_login_attempts, 0), locked_until, COALESCE(role, 'owner') \
          FROM accounts WHERE username = $1 OR phone = $1 LIMIT 1"
     )
     .bind(&input)
     .fetch_optional(&state.pool)
     .await?;
 
-    let (user_id, actual_username, password_hash, display_name, _store_name, _store_id, is_active, failed_attempts, locked_until) = match account {
+    let (user_id, actual_username, password_hash, display_name, _store_name, _store_id, is_active, failed_attempts, locked_until, db_role) = match account {
         Some(a) => a,
         None => {
             return Ok(Json(json!({ "success": false, "message": "Tên đăng nhập hoặc mật khẩu không đúng" })));
@@ -328,17 +328,18 @@ async fn login(
         "data_store_id": s.4
     })).collect();
 
-    // Generate JWT with default store's data_store_id
-    let token = auth::create_token(user_id, active_data_store_id, "owner", &state.config.jwt_secret)?;
-    let refresh_token = auth::create_refresh_token(user_id, active_data_store_id, "owner", &state.config.jwt_secret)?;
+    // Generate JWT with default store's data_store_id and actual role
+    let jwt_role = db_role.as_str();
+    let token = auth::create_token(user_id, active_data_store_id, jwt_role, &state.config.jwt_secret)?;
+    let refresh_token = auth::create_refresh_token(user_id, active_data_store_id, jwt_role, &state.config.jwt_secret)?;
 
-    tracing::info!("✅ Account login: username={}, store_id={}, stores={}", actual_username, active_store_id, stores.len());
+    tracing::info!("✅ Account login: username={}, role={}, store_id={}, stores={}", actual_username, jwt_role, active_store_id, stores.len());
 
     Ok(Json(json!({
         "success": true,
         "token": token,
         "refresh_token": refresh_token,
-        "user": { "id": user_id, "username": actual_username, "display_name": display_name, "role": "owner" },
+        "user": { "id": user_id, "username": actual_username, "display_name": display_name, "role": jwt_role },
         "store_id": active_store_id,
         "store_name": active_store_name,
         "stores": stores_json
