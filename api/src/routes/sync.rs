@@ -182,6 +182,7 @@ pub struct SyncStaffMember {
     pub display_name: Option<String>,
     pub role: Option<String>,
     pub pin: Option<String>,
+    #[serde(default)] pub pin_set: Option<bool>,  // desktop sends this instead of pin
     pub permissions: Option<String>,
     pub is_active: Option<bool>,
     pub created_at: Option<String>,

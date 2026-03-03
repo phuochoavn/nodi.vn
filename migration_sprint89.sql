@@ -7,7 +7,7 @@
 -- ============================================================
 CREATE TABLE IF NOT EXISTS sync_staff_members (
     id BIGINT NOT NULL,
-    store_id INTEGER NOT NULL REFERENCES stores(id),
+    store_id INTEGER NOT NULL,                   -- data_store_id from sync (NOT FK to stores)
     username TEXT NOT NULL,
     display_name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'staff',   -- 'owner' or 'staff'
