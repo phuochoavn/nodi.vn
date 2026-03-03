@@ -30,16 +30,16 @@
           
           <!-- Desktop Sidebar Navigation -->
           <aside class="hidden lg:block w-[280px] flex-shrink-0 sticky top-32 z-30">
-            <nav class="flex flex-col gap-1 pr-6 border-r border-slate-200 dark:border-slate-800">
+            <nav class="flex flex-col gap-1 pr-6 border-r border-slate-200 dark:border-slate-800 max-h-[calc(100vh-10rem)] overflow-y-auto scrollbar-hide">
               <a v-for="section in sections" :key="section.id"
                  :href="`#${section.id}`"
-                 class="group flex items-center gap-3 px-4 py-3 rounded-l-xl text-sm transition-all duration-300 relative"
+                 class="group flex items-center gap-3 px-4 py-2.5 rounded-l-xl text-sm transition-all duration-300 relative"
                  :class="activeSection === section.id 
                    ? 'font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 before:absolute before:right-[-1px] before:top-0 before:bottom-0 before:w-1 before:bg-green-500 before:rounded-l' 
                    : 'font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200'">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                <div class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0"
                      :class="activeSection === section.id ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'">
-                  <component :is="section.iconComponent" :size="16" />
+                  <component :is="section.iconComponent" :size="14" />
                 </div>
                 {{ section.title }}
               </a>
@@ -120,13 +120,18 @@
 </template>
 
 <script setup>
-import { ShoppingCart, Package, Wallet, FileText, BarChart3, Bot, RefreshCw, ClipboardList, FileSpreadsheet, Check, Download } from 'lucide-vue-next'
+import { 
+  ShoppingCart, Package, Wallet, FileText, BarChart3, Bot, RefreshCw, 
+  ClipboardList, FileSpreadsheet, Check, Download, Warehouse, DollarSign,
+  Calculator, Users, Cloud, UserCheck, Shield, Printer, Settings, Smartphone,
+  QrCode, Lock
+} from 'lucide-vue-next'
 import { ref, onMounted, onUnmounted } from 'vue'
 
 useHead({
   title: 'Tính năng — Nodi POS',
   meta: [
-    { name: 'description', content: 'Tính năng chi tiết của Nodi POS: Bán hàng POS, nhập hàng NCC, công nợ, hóa đơn điện tử, báo cáo, AI chatbot' },
+    { name: 'description', content: 'Tính năng chi tiết của Nodi POS: Bán hàng POS, quản lý kho, nhập hàng NCC, công nợ, hóa đơn điện tử, báo cáo, AI chatbot, quản lý nhân viên, thu chi, đồng bộ cloud' },
   ],
 })
 
@@ -136,81 +141,180 @@ let observer = null
 const sections = [
   {
     id: 'pos', iconComponent: ShoppingCart, title: 'Bán hàng POS',
-    desc: 'Bán hàng thao tác dưới 5 giây, hỗ trợ tìm kiếm nhanh, quét mã vạch chuyên nghiệp.',
+    desc: 'Bán hàng thao tác dưới 5 giây. Hỗ trợ quét mã vạch, thanh toán đa kênh, VietQR và ghi nợ ngay tại quầy.',
     items: [
-      'Quét mã vạch, tìm kiếm sản phẩm thông minh',
-      'Đa đơn vị tính linh hoạt (chai, thùng, lít, kg)',
-      'Thanh toán đa phương thức: tiền mặt, chuyển khoản, ghi nợ',
-      'In hóa đơn (máy in nhiệt siêu tốc, A4 Laser)',
+      'Quét mã vạch + Remote Scanner (quét qua điện thoại)',
+      'Tìm kiếm nhanh theo tên, barcode, hoạt chất',
+      'Đa đơn vị tính linh hoạt (chai, thùng, lít, kg) — quy đổi tự động',
+      'Thanh toán: tiền mặt, chuyển khoản, kết hợp',
+      'Thanh toán VietQR (Napas) — tạo mã QR tự động, hiển thị màn hình phụ',
+      'Ghi nợ khách hàng ngay tại quầy checkout',
+      'Toggle xuất hóa đơn VAT / bán lẻ (Dual-Mode)',
+      'In hóa đơn qua máy in nhiệt (58mm/80mm)',
+      'Gán khách hàng vào đơn để theo dõi lịch sử mua',
     ],
   },
   {
-    id: 'nhap-hang', iconComponent: Package, title: 'Nhập hàng',
-    desc: 'Quản lý toàn diện quy trình nhập hàng, kiểm soát nhà cung cấp chặt chẽ.',
+    id: 'kho-hang', iconComponent: Warehouse, title: 'Quản lý kho hàng',
+    desc: 'Quản lý tồn kho, lô hàng, hạn sử dụng với hệ thống FEFO tự động. Catalog 5700+ sản phẩm nông nghiệp có sẵn.',
     items: [
-      'Quản lý danh sách nhà cung cấp (Công ty, Đại lý)',
-      'Tạo phiếu nhập hàng chi tiết, dễ dàng đối soát',
-      'Kiểm soát lô hàng, cảnh báo hạn sử dụng',
-      'Thanh toán phiếu nhập tự động trừ công nợ',
+      'Danh sách sản phẩm — tồn kho, giá bán, giá vốn real-time',
+      'Quản lý lô hàng (Batch) — theo dõi ngày sản xuất, ngày hết hạn',
+      'FEFO/FIFO — tự động bán lô hết hạn trước',
+      'Cảnh báo hết hạn (≤30 ngày, ≤7 ngày) và hết hàng (tồn kho ≤5)',
+      'Phát hiện hàng bán chậm — sản phẩm lâu không bán',
+      'Kiểm kho (Stocktake) — nhập thực tế, tính chênh lệch tự động',
+      'Xuất Excel tồn kho (.xlsx)',
+      'Catalog 5700+ sản phẩm nông nghiệp VN có sẵn (Thuốc BVTV, Phân bón, Giống)',
     ],
   },
   {
-    id: 'cong-no', iconComponent: Wallet, title: 'Công nợ',
-    desc: 'Phần mềm nhắc nợ tự động, hiển thị chi tiết lịch sử thu chi.',
+    id: 'nhap-hang', iconComponent: Package, title: 'Nhập hàng & NCC',
+    desc: 'Quản lý toàn diện quy trình nhập hàng, kiểm soát nhà cung cấp và công nợ chặt chẽ.',
     items: [
-      'Theo dõi công nợ khách hàng theo từng mùa vụ',
-      'Quản lý công nợ nhà cung cấp minh bạch',
-      'Lịch sử giao dịch, đối soát công nợ chi tiết',
-      'Tạo phiếu thu/chi nợ cực kì dễ dàng',
+      'Tạo phiếu nhập hàng — chọn NCC, thêm sản phẩm, số lượng, giá nhập',
+      'Ghi nợ nhà cung cấp — tự động tính công nợ khi nhập hàng',
+      'Lịch sử nhập hàng — lọc theo ngày, NCC, trạng thái',
+      'Chi tiết NCC — lịch sử nhập, công nợ, tổng giao dịch',
+      'Thanh toán nợ NCC — trả từng phần hoặc toàn bộ',
+      'Snapshot nợ NCC — lưu snapshot theo ngày để đối soát',
+      'Tự động cập nhật tồn kho sau khi nhập',
+    ],
+  },
+  {
+    id: 'khach-hang', iconComponent: UserCheck, title: 'Khách hàng & Công nợ',
+    desc: 'Quản lý khách hàng, công nợ, lịch sử giao dịch với phân khúc thông minh.',
+    items: [
+      'Danh sách khách hàng — tên, SĐT, địa chỉ, ghi chú',
+      'Quản lý công nợ — ghi nợ, thu nợ, lịch sử chi tiết',
+      'Thu nợ từng phần hoặc toàn bộ, theo dõi timeline giao dịch',
+      'Phân khúc khách hàng — VIP, thường xuyên, mới, lâu không mua (churn)',
+      'Chi tiết khách — tổng mua, tổng nợ, lịch sử mua hàng đầy đủ',
+    ],
+  },
+  {
+    id: 'thu-chi', iconComponent: DollarSign, title: 'Thu chi (Cashflow)',
+    desc: 'Sổ thu chi giúp ghi nhận mọi khoản thu/chi ngoài bán hàng, kiểm soát dòng tiền cửa hàng.',
+    items: [
+      'Sổ thu chi — ghi nhận thu/chi ngoài bán hàng (tiền thuê, điện, lương...)',
+      'Phân loại giao dịch — danh mục thu/chi tùy chỉnh',
+      'Tổng hợp — thu - chi = tồn quỹ theo ngày/tháng',
+      'Lọc theo thời gian — xem thu chi theo khoảng ngày bất kỳ',
     ],
   },
   {
     id: 'hddt', iconComponent: FileText, title: 'Hóa đơn điện tử',
-    desc: 'Giải pháp khởi tạo hóa đơn trực tiếp từ máy tính tiền tiết kiệm thời gian.',
+    desc: 'Giải pháp khởi tạo hóa đơn trực tiếp từ máy tính tiền, tuân thủ pháp luật thuế.',
     items: [
-      'Tích hợp liền mạch hệ thống VNPT S-Invoice',
+      'Tích hợp VNPT S-Invoice, Viettel, CK-S',
       'Phát hành HĐĐT ngay tại màn hình POS',
-      'Cho phép tra cứu, gửi lại HĐĐT trực tiếp',
-      'Đảm bảo tuân thủ tuyệt đối Nghị định 123/2020/NĐ-CP',
+      'Tra cứu, gửi lại HĐĐT trực tiếp',
+      'Xuất XML hóa đơn theo chuẩn — import vào eTax miễn phí',
+      'Tuân thủ Nghị định 123/2020/NĐ-CP',
     ],
   },
   {
-    id: 'bao-cao', iconComponent: BarChart3, title: 'Báo cáo',
+    id: 'thue', iconComponent: Calculator, title: 'Thuế & Kế toán',
+    desc: 'Dual-Mode báo cáo thuế, bảng VAT chi tiết, cảnh báo ngưỡng doanh thu — giúp chủ cửa hàng yên tâm tuân thủ thuế.',
+    items: [
+      'Dual-Mode — tách riêng doanh thu có hóa đơn (khai thuế) vs bán lẻ không hóa đơn',
+      'Bảng VAT chi tiết — phân tách thuế suất 0%, 5%, 10% từng tháng',
+      'Cảnh báo ngưỡng thuế — nhắc khi doanh thu gần 500M (thuế khoán) hoặc 1 tỷ (HĐĐT)',
+      'Thuế suất sản phẩm — gán riêng cho từng SP (0%/5%/10%)',
+      'Kiến thức thuế 125+ topics — VAT, CIT, PIT, NĐ 123, giấy phép BVTV...',
+    ],
+  },
+  {
+    id: 'bao-cao', iconComponent: BarChart3, title: 'Báo cáo & Thống kê',
     desc: 'Biểu đồ trực quan giúp nắm bắt sức khỏe kinh doanh tức thời.',
     items: [
-      'Thống kê doanh thu theo ngày / tháng / năm',
-      'Phân tích lãi gộp / Lỗ chi tiết theo từng hóa đơn',
-      'Báo cáo tự động vinh danh top sản phẩm bán chạy',
-      'Kiểm soát tồn kho rủi ro: sắp hết, sắp hết hạn',
+      'Doanh thu theo ngày, tuần, tháng, quý, năm, tùy chọn khoảng thời gian',
+      'Lợi nhuận tính tự động từ giá bán - giá vốn',
+      'Sản phẩm bán chạy — top products theo số lượng hoặc doanh thu',
+      'So sánh doanh thu — so sánh 2 khoảng thời gian (tháng này vs tháng trước)',
+      'Biểu đồ cột, đường, tròn trực quan',
+      'Xuất báo cáo Excel (.xlsx)',
     ],
   },
   {
-    id: 'ai', iconComponent: Bot, title: 'Trợ lý AI',
-    desc: 'Báo cáo thông minh dạng hội thoại, trò chuyện tự nhiên như người thật.',
+    id: 'ai', iconComponent: Bot, title: 'Trợ lý AI Nodi',
+    desc: 'AI thông minh 100% offline, hiểu tiếng Việt tự nhiên, hỗ trợ bán hàng bằng chat, chẩn đoán 315+ bệnh cây trồng.',
     items: [
-      '"Hôm nay bán được bao nhiêu?" → AI phản hồi số liệu ngay',
-      '"Liệt kê danh sách nợ xấu?" → AI lập danh sách',
-      '"Trong kho còn thuốc A không?" → AI kiểm tra kho',
-      'Tiết kiệm vô số thời gian gõ tìm kiếm thủ công',
+      '46 lệnh AI — bán hàng, tra cứu kho, báo cáo bằng chat tự nhiên',
+      '"Lấy 2 chai Beam 75WP" → thêm đúng SP vào giỏ hàng',
+      'Chuyên gia bệnh cây trồng — 315+ bệnh trên Lúa, Sầu riêng, Cà phê...',
+      'Guided Diagnostic — hỏi từng bước khi triệu chứng mơ hồ',
+      'Tra cứu doanh thu, tồn kho, công nợ bằng câu hỏi tự nhiên',
+      'Self-Learning — học từ feedback 👍/👎, tự cải thiện',
+      '7-Layer Fallback — luôn có câu trả lời, graceful degradation',
+      'Cảnh báo mùa vụ — nhắc sâu bệnh theo mùa trong năm',
+      'Kiến thức thuế 125+ topics — VAT, CIT, PIT, NĐ 123, giấy phép BVTV',
     ],
   },
   {
-    id: 'tra-hang', iconComponent: RefreshCw, title: 'Trả hàng',
-    desc: 'Xử lý tình huống trả hàng chuyên nghiệp mà không gây lệch sổ sách.',
+    id: 'nhan-vien', iconComponent: Users, title: 'Quản lý nhân viên',
+    desc: 'Phân quyền chi tiết 9 quyền, đăng nhập PIN 4 số, đổi ca nhanh — kiểm soát truy cập an toàn.',
     items: [
-      'Chọn, quét sản phẩm cần trả từ hóa đơn gốc',
-      'Phân loại mã lý do trả: hư hỏng, hết hạn, lỗi NCC',
-      'Xử lý hoàn trả bằng tiền mặt hoặc cấn trừ công nợ',
-      'Quản lý toàn bộ lịch sử hoàn trả hàng',
+      'Đăng nhập bằng mã PIN 4 số — mỗi NV có PIN riêng',
+      'Phân quyền chi tiết (9 quyền): bán hàng, kho, doanh thu, báo cáo, KH, thu chi...',
+      'RBAC — nhân viên chỉ thấy menu/trang được phân quyền',
+      'Màn hình khóa — khóa máy POS, yêu cầu PIN để mở lại',
+      'Đổi ca — chuyển nhanh giữa các nhân viên bằng PIN',
     ],
   },
   {
-    id: 'chot-so', iconComponent: ClipboardList, title: 'Chốt sổ',
-    desc: 'Quy trình cuối ngày an toàn, bảo đảm dòng tiền thực tế khớp với hệ thống.',
+    id: 'don-hang', iconComponent: ClipboardList, title: 'Đơn hàng & Trả hàng',
+    desc: 'Lịch sử đơn hàng đầy đủ, lọc theo ngày, trạng thái. Xử lý trả hàng chuyên nghiệp.',
     items: [
-      'Tổng kết doanh thu tổng hợp chỉ bằng 1 nút bấm',
-      'Đối soát sự chênh lệch tiền mặt thực tế vs hệ thống',
-      'Khóa dữ liệu an toàn theo ngày',
+      'Danh sách đơn hàng — lọc theo ngày, trạng thái, phương thức thanh toán',
+      'Filter hóa đơn VAT — lọc riêng đơn có xuất HĐ vs bán lẻ',
+      'In lại hóa đơn bất kỳ đơn hàng nào',
+      'Trả hàng (Return) — hoàn tiền/tồn kho, phân loại lý do trả',
+      'Chốt sổ cuối ngày — tổng kết doanh thu, số đơn, tồn quỹ',
+    ],
+  },
+  {
+    id: 'cloud', iconComponent: Cloud, title: 'Đồng bộ Cloud & Sao lưu',
+    desc: 'Hoạt động 100% offline, đồng bộ tự động khi có mạng. Cloud backup an toàn, khôi phục 1 click.',
+    items: [
+      'Offline-first — hoạt động 100% offline, sync khi có mạng',
+      'Sync tự động — đồng bộ dữ liệu lên server mỗi 60 giây',
+      'Exponential backoff — server lỗi tự giãn retry (60s → 120s → 10 phút)',
+      'Cloud backup — sao lưu database lên cloud, lên lịch tự động',
+      'Khôi phục từ cloud — restore database từ bản backup, chỉ 1 click',
+      'Sync indicator — hiển thị trạng thái đồng bộ trên giao diện',
+    ],
+  },
+  {
+    id: 'bao-mat', iconComponent: Shield, title: 'Bảo mật & Bản quyền',
+    desc: 'Kích hoạt bằng license key, xác thực HWID, đăng nhập/đăng ký bảo mật JWT.',
+    items: [
+      'Kích hoạt bằng license key — nhập key để kích hoạt Pro',
+      'Chế độ Free/Trial — dùng thử đầy đủ tính năng trong 30 ngày',
+      'Xác thực HWID — mỗi máy tính có định danh duy nhất',
+      'Đăng nhập/đăng ký tài khoản — quản lý từ xa qua web',
+      'JWT authentication — xác thực bảo mật cho API cloud',
+    ],
+  },
+  {
+    id: 'in-an', iconComponent: Printer, title: 'In ấn',
+    desc: 'In hóa đơn bán hàng, phiếu nhập, công nợ qua máy in nhiệt hoặc A4.',
+    items: [
+      'In hóa đơn bán hàng — máy in nhiệt 58mm/80mm, A4 Laser',
+      'In phiếu nhập hàng, phiếu công nợ khách hàng',
+      'Cấu hình máy in — chọn máy in, kích thước giấy, logo',
+    ],
+  },
+  {
+    id: 'he-thong', iconComponent: Settings, title: 'Cài đặt & Tiện ích',
+    desc: 'Cấu hình cửa hàng, giao diện, AI, cập nhật tự động OTA, hỗ trợ kỹ thuật.',
+    items: [
+      'Thông tin cửa hàng — tên, SĐT, địa chỉ, logo (hiển thị trên hóa đơn)',
+      'Dark Mode / Light Mode — giao diện tối giảm mỏi mắt',
+      'Tour hướng dẫn — hướng dẫn sử dụng cho người dùng mới',
+      'Chat trực tiếp KTV — chat real-time với đội ngũ kỹ thuật',
+      'Cập nhật OTA — kiểm tra phiên bản mới, tải về và cài đặt trong app',
+      'Quản lý database — xem dung lượng, xóa dữ liệu cũ, reset',
     ],
   },
   {
@@ -218,7 +322,7 @@ const sections = [
     desc: 'Bắt đầu dùng thử chỉ sau 5 phút với dữ liệu hàng hóa đẩy lên tự động.',
     items: [
       'Tự động map cột hệ thống với cột Excel tiếng Việt',
-      'Nhập nhanh kho danh mục lên đến 4500+ sản phẩm BVTV',
+      'Nhập nhanh kho danh mục lên đến 5700+ sản phẩm BVTV',
       'Preview trực quan trước khi xác nhận lưu dữ liệu',
     ],
   },
@@ -227,7 +331,6 @@ const sections = [
 onMounted(() => {
   // Setup intersection observer for scroll spy
   observer = new IntersectionObserver((entries) => {
-    // get visible entries and pick the top one
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         activeSection.value = entry.target.id
@@ -249,7 +352,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* Hidden scrollbar for mobile tabs */
+/* Hidden scrollbar for mobile tabs & sidebar */
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
 }

@@ -119,6 +119,7 @@ const heroPages = ['/', '/index']
 const isHeroPage = computed(() => heroPages.includes(route.path))
 
 const navLinks = [
+  { label: 'Giới thiệu', to: '/gioi-thieu' },
   { label: 'Tính năng', to: '/tinh-nang' },
   { label: 'Bảng giá', to: '/bang-gia' },
   { label: 'Tải app', to: '/tai-ung-dung' },

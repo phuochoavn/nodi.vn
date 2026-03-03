@@ -13,7 +13,8 @@
 <script setup>
 import {
   ShoppingCart, Package, Wallet, FileText, BarChart3, Bot,
-  Zap, CloudUpload, RefreshCw, ClipboardList, FileSpreadsheet, Scan
+  Zap, CloudUpload, RefreshCw, ClipboardList, FileSpreadsheet, Scan,
+  Warehouse, Users, DollarSign, Calculator, Shield, Settings, Printer, Cloud
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -35,6 +36,14 @@ const iconMap = {
   'clipboard': ClipboardList,
   'spreadsheet': FileSpreadsheet,
   'scan': Scan,
+  'warehouse': Warehouse,
+  'users': Users,
+  'dollar-sign': DollarSign,
+  'calculator': Calculator,
+  'shield': Shield,
+  'settings': Settings,
+  'printer': Printer,
+  'cloud-sync': Cloud,
 }
 
 const iconComponent = computed(() => iconMap[props.icon] || Zap)

@@ -38,17 +38,17 @@
           <h2 class="section-title">Tính năng nổi bật</h2>
           <p class="section-subtitle">Tất cả công cụ bạn cần để quản lý cửa hàng hiệu quả</p>
         </div>
-        <div class="grid-3 mb-12">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <FeatureCard
             v-for="(f, i) in features" :key="f.title"
             :icon="f.icon" :title="f.title" :description="f.desc"
             class="reveal"
-            :class="`reveal-delay-${(i % 3) + 1}`"
+            :class="`reveal-delay-${(i % 4) + 1}`"
           />
         </div>
         <div class="text-center reveal">
           <NuxtLink to="/tinh-nang" class="btn btn-outline border-slate-300 dark:border-slate-600 hover:border-primary">
-            Xem chi tiết 9+ tính năng
+            Xem chi tiết 16+ tính năng
             <ArrowRight :size="16" />
           </NuxtLink>
         </div>
@@ -109,26 +109,32 @@
 </template>
 
 <script setup>
-import { Zap, BarChart3, Bot, CloudUpload, ArrowRight, Download } from 'lucide-vue-next'
+import { Zap, BarChart3, Bot, CloudUpload, ArrowRight, Download, WifiOff, Receipt } from 'lucide-vue-next'
 
 useHead({
   title: 'Nodi POS — Phần mềm quản lý cửa hàng vật tư nông nghiệp',
+  meta: [
+    { name: 'description', content: 'Nodi POS — phần mềm quản lý bán hàng thông minh dành riêng cho cửa hàng vật tư nông nghiệp. 100% offline, AI chẩn đoán bệnh cây, hóa đơn điện tử, công nợ, quản lý kho.' },
+    { name: 'keywords', content: 'phần mềm quản lý cửa hàng vật tư nông nghiệp, POS thuốc BVTV, phần mềm bán thuốc trừ sâu, Nodi POS' },
+  ],
 })
 
 const usps = [
-  { iconComponent: Zap, title: 'Bán hàng dưới 5 giây', desc: 'Quét mã, tìm kiếm nhanh, tính tiền tự động' },
-  { iconComponent: BarChart3, title: 'Công nợ thông minh', desc: 'Theo dõi nợ khách hàng, nhà cung cấp. Thông báo tự động' },
-  { iconComponent: Bot, title: 'Trợ lý AI', desc: 'Hỏi doanh thu, tồn kho, công nợ — AI trả lời ngay' },
-  { iconComponent: CloudUpload, title: 'Backup đám mây', desc: 'Máy hư không mất dữ liệu. Khôi phục 1 click' },
+  { iconComponent: Zap, title: 'Bán hàng dưới 5 giây', desc: 'Quét mã, VietQR Napas, ghi nợ ngay tại quầy' },
+  { iconComponent: WifiOff, title: '100% Offline', desc: 'Hoạt động hoàn toàn không cần internet, sync khi có mạng' },
+  { iconComponent: Bot, title: 'Trợ lý AI 46 lệnh', desc: 'Bán hàng bằng chat, chẩn đoán 315+ bệnh cây trồng' },
+  { iconComponent: Receipt, title: 'Dual-Mode thuế', desc: 'Tách riêng hóa đơn VAT vs bán lẻ, cảnh báo ngưỡng thuế' },
 ]
 
 const features = [
-  { icon: 'shopping-cart', title: 'Bán hàng POS', desc: 'Quét mã, tính tiền, in hóa đơn — nhanh và chính xác' },
-  { icon: 'package', title: 'Nhập hàng & NCC', desc: 'Quản lý nhà cung cấp, phiếu nhập, lô hàng' },
-  { icon: 'wallet', title: 'Công nợ KH & NCC', desc: 'Theo dõi công nợ, phiếu thu chi, lịch sử giao dịch' },
-  { icon: 'file-text', title: 'Hóa đơn điện tử', desc: 'Tích hợp VNPT S-Invoice, tuân thủ NĐ 123/2020' },
-  { icon: 'bar-chart', title: 'Báo cáo & Thống kê', desc: 'Doanh thu, lãi/lỗ, tồn kho, top sản phẩm' },
-  { icon: 'bot', title: 'Trợ lý AI Chatbot', desc: 'Hỏi bằng tiếng Việt tự nhiên, trả lời tức thì' },
+  { icon: 'shopping-cart', title: 'Bán hàng POS', desc: 'Quét mã, VietQR, tiền mặt, chuyển khoản — dưới 5 giây' },
+  { icon: 'warehouse', title: 'Quản lý kho', desc: 'Lô hàng, FEFO, hạn sử dụng, catalog 5700+ SP' },
+  { icon: 'package', title: 'Nhập hàng & NCC', desc: 'Phiếu nhập, công nợ NCC, tự động cập nhật kho' },
+  { icon: 'wallet', title: 'Công nợ & Thu chi', desc: 'Ghi nợ, thu nợ, phân khúc KH, sổ thu chi' },
+  { icon: 'file-text', title: 'HĐĐT & Thuế', desc: 'Dual-Mode, VNPT S-Invoice, xuất XML eTax' },
+  { icon: 'bar-chart', title: 'Báo cáo', desc: 'Doanh thu, lợi nhuận, so sánh, biểu đồ trực quan' },
+  { icon: 'bot', title: 'Trợ lý AI', desc: '46 lệnh, 315+ bệnh, self-learning, 100% offline' },
+  { icon: 'users', title: 'Nhân viên & PIN', desc: '9 quyền, PIN 4 số, đổi ca, RBAC' },
 ]
 
 const pricingPreview = [
