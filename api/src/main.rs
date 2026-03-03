@@ -2,7 +2,7 @@ use axum::Router;
 use tower_http::cors::CorsLayer;
 use axum::http::{HeaderValue, Method, header};
 use tower_http::trace::TraceLayer;
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer, key_extractor::SmartIpKeyExtractor};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -78,8 +78,10 @@ async fn main() {
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT, header::ORIGIN])
         .allow_credentials(true);
 
-    // Rate limiting: 50 req/sec per IP with burst of 100
+    // Rate limiting: 50 req/sec per real client IP with burst of 100
+    // SmartIpKeyExtractor reads X-Forwarded-For > X-Real-Ip > peer IP
     let governor_conf = GovernorConfigBuilder::default()
+        .key_extractor(SmartIpKeyExtractor)
         .per_second(50)
         .burst_size(100)
         .finish()
