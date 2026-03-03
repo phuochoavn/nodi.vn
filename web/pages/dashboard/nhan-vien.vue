@@ -6,29 +6,31 @@
       <div v-if="loading" class="skeleton-wrap">
         <div v-for="i in 4" :key="i" class="skeleton-row"></div>
       </div>
-      <div v-else-if="staff.length === 0" class="empty-state">
+      <div v-else-if="staffOnly.length === 0" class="empty-state">
         <div class="empty-icon">👤</div>
         <p>Chưa có nhân viên nào</p>
         <p class="empty-sub">Thêm nhân viên từ ứng dụng Nodi POS (desktop), dữ liệu sẽ tự động đồng bộ lên đây.</p>
       </div>
       <div v-else>
         <!-- Stats -->
+        <!-- Owner info -->
+        <div v-if="ownerName" class="owner-info">
+          <span>👑 Chủ cửa hàng: <strong>{{ ownerName }}</strong> — toàn quyền (9/9)</span>
+        </div>
+
+        <!-- Stats -->
         <div class="stats-row">
           <div class="mini-stat">
-            <div class="mini-value">{{ staff.length }}</div>
-            <div class="mini-label">Tổng</div>
+            <div class="mini-value">{{ staffOnly.length }}</div>
+            <div class="mini-label">Nhân viên</div>
           </div>
           <div class="mini-stat">
-            <div class="mini-value green">{{ staff.filter(s => s.is_active).length }}</div>
+            <div class="mini-value green">{{ staffOnly.filter(s => s.is_active).length }}</div>
             <div class="mini-label">Hoạt động</div>
           </div>
           <div class="mini-stat">
-            <div class="mini-value red">{{ staff.filter(s => !s.is_active).length }}</div>
+            <div class="mini-value red">{{ staffOnly.filter(s => !s.is_active).length }}</div>
             <div class="mini-label">Vô hiệu</div>
-          </div>
-          <div class="mini-stat">
-            <div class="mini-value blue">{{ staff.filter(s => s.role === 'owner').length }}</div>
-            <div class="mini-label">Chủ CH</div>
           </div>
         </div>
 
@@ -50,7 +52,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="s in staff" :key="s.id" :class="{ inactive: !s.is_active }">
+              <tr v-for="s in staffOnly" :key="s.id" :class="{ inactive: !s.is_active }">
                 <td class="name-cell">
                   <div class="avatar" :class="s.role === 'owner' ? 'owner' : ''">{{ s.display_name?.charAt(0)?.toUpperCase() }}</div>
                   <div>
@@ -59,7 +61,7 @@
                   </div>
                 </td>
                 <td>
-                  <span class="role-badge" :class="s.role">{{ s.role === 'owner' ? 'Chủ cửa hàng' : 'Nhân viên' }}</span>
+                  <span class="role-badge staff">Nhân viên</span>
                 </td>
                 <td>
                   <span class="status-dot" :class="s.is_active ? 'active' : ''"></span>
@@ -70,19 +72,15 @@
                   <span v-else class="pin-badge not-set">—</span>
                 </td>
                 <td>
-                  <span v-if="s.role === 'owner'" class="perm-count full">9/9</span>
-                  <span v-else class="perm-count" :class="permCount(s.permissions) > 0 ? '' : 'zero'">
+                  <span class="perm-count" :class="permCount(s.permissions) > 0 ? '' : 'zero'">
                     {{ permCount(s.permissions) }}/9
                   </span>
                 </td>
                 <td class="actions-cell">
-                  <template v-if="s.role !== 'owner'">
-                    <button class="btn-edit" @click="openPermModal(s)" title="Sửa quyền">✏️ Quyền</button>
-                    <button class="btn-toggle" :class="s.is_active ? 'deactivate' : 'activate'" @click="toggleActive(s)" :disabled="toggling === s.id">
-                      {{ s.is_active ? '🚫 Tắt' : '✅ Bật' }}
-                    </button>
-                  </template>
-                  <span v-else class="owner-label">—</span>
+                  <button class="btn-edit" @click="openPermModal(s)" title="Sửa quyền">✏️ Quyền</button>
+                  <button class="btn-toggle" :class="s.is_active ? 'deactivate' : 'activate'" @click="toggleActive(s)" :disabled="toggling === s.id">
+                    {{ s.is_active ? '🚫 Tắt' : '✅ Bật' }}
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -136,6 +134,12 @@ const editingStaff = ref(null)
 const editPerms = ref({})
 const saving = ref(false)
 const toggling = ref(null)
+
+const staffOnly = computed(() => staff.value.filter(s => s.role !== 'owner'))
+const ownerName = computed(() => {
+  const o = staff.value.find(s => s.role === 'owner')
+  return o ? o.display_name : null
+})
 
 const permKeys = [
   { key: 'view_sales', label: 'Xem trang Bán hàng + Lịch sử ĐH', icon: '🛒' },
@@ -203,6 +207,7 @@ async function toggleActive(s) {
 </script>
 
 <style scoped>
+.owner-info { background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.85rem; color: #92400E; }
 .info-bar { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.85rem; color: #1E40AF; }
 
 .stats-row { display: flex; gap: 12px; margin-bottom: 16px; }
@@ -290,6 +295,7 @@ async function toggleActive(s) {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Dark mode */
+:root.dark .owner-info { background: #422006; border-color: #A16207; color: #FDE68A; }
 :root.dark .info-bar { background: #1E293B; border-color: #334155; color: #93C5FD; }
 :root.dark .mini-stat { background: #1E293B; }
 :root.dark .mini-value { color: #E2E8F0; }
