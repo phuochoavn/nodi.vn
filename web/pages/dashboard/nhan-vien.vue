@@ -68,8 +68,8 @@
                   {{ s.is_active ? 'Hoạt động' : 'Vô hiệu' }}
                 </td>
                 <td>
-                  <span v-if="s.pin_set" class="pin-badge set">🔑 Đã đặt</span>
-                  <span v-else class="pin-badge not-set">—</span>
+                  <span v-if="s.pin_set" class="pin-badge set" @click="openPinModal(s)" title="Bấm để đổi PIN">🔑 Đã đặt</span>
+                  <span v-else class="pin-badge not-set" @click="openPinModal(s)" title="Bấm để đặt PIN">➕ Đặt PIN</span>
                 </td>
                 <td>
                   <span class="perm-count" :class="permCount(s.permissions) > 0 ? '' : 'zero'">
@@ -117,6 +117,31 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- PIN Modal -->
+    <Teleport to="body">
+      <div v-if="showPinModal" class="modal-backdrop" @click.self="showPinModal = false">
+        <div class="modal-box" style="max-width: 360px">
+          <div class="modal-header">
+            <h3>🔑 Đổi mã PIN: {{ pinStaff?.display_name }}</h3>
+            <button class="close-btn" @click="showPinModal = false">✕</button>
+          </div>
+          <div class="modal-body" style="padding: 20px">
+            <p style="margin-bottom: 12px; font-size: 0.85rem; color: #64748B">Nhập mã PIN 4 chữ số cho nhân viên</p>
+            <div class="pin-input-wrap">
+              <input v-for="i in 4" :key="i" :ref="el => { if (el) pinRefs[i-1] = el }" type="text" inputmode="numeric" maxlength="1" class="pin-digit" v-model="pinDigits[i-1]" @input="onPinInput(i-1)" @keydown="onPinKeydown($event, i-1)" />
+            </div>
+            <p v-if="pinError" class="pin-error">{{ pinError }}</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="showPinModal = false">Hủy</button>
+            <button class="btn-save" @click="savePin" :disabled="savingPin || pinDigits.join('').length < 4">
+              {{ savingPin ? 'Đang lưu...' : '💾 Lưu PIN' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -134,6 +159,12 @@ const editingStaff = ref(null)
 const editPerms = ref({})
 const saving = ref(false)
 const toggling = ref(null)
+const showPinModal = ref(false)
+const pinStaff = ref(null)
+const pinDigits = ref(['', '', '', ''])
+const pinRefs = ref([])
+const savingPin = ref(false)
+const pinError = ref('')
 
 const staffOnly = computed(() => staff.value.filter(s => s.role !== 'owner'))
 const ownerName = computed(() => {
@@ -204,6 +235,46 @@ async function toggleActive(s) {
   }
   toggling.value = null
 }
+
+function openPinModal(s) {
+  pinStaff.value = s
+  pinDigits.value = ['', '', '', '']
+  pinError.value = ''
+  showPinModal.value = true
+  nextTick(() => { if (pinRefs.value[0]) pinRefs.value[0].focus() })
+}
+
+function onPinInput(idx) {
+  const v = pinDigits.value[idx]
+  if (v && !/^\d$/.test(v)) { pinDigits.value[idx] = ''; return }
+  if (v && idx < 3 && pinRefs.value[idx + 1]) pinRefs.value[idx + 1].focus()
+}
+
+function onPinKeydown(e, idx) {
+  if (e.key === 'Backspace' && !pinDigits.value[idx] && idx > 0) {
+    pinRefs.value[idx - 1].focus()
+  }
+}
+
+async function savePin() {
+  const pin = pinDigits.value.join('')
+  if (pin.length !== 4) { pinError.value = 'Nhập đủ 4 chữ số'; return }
+  savingPin.value = true
+  pinError.value = ''
+  try {
+    await fetchApi(`/api/dashboard/staff/${pinStaff.value.id}/pin`, {
+      method: 'PUT',
+      body: { pin },
+    })
+    const idx = staff.value.findIndex(s => s.id === pinStaff.value.id)
+    if (idx !== -1) staff.value[idx].pin_set = true
+    showPinModal.value = false
+    addToast('Cập nhật mã PIN thành công', 'success')
+  } catch (e) {
+    pinError.value = e.data?.message || 'Lỗi cập nhật PIN'
+  }
+  savingPin.value = false
+}
 </script>
 
 <style scoped>
@@ -238,9 +309,16 @@ async function toggleActive(s) {
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #CBD5E1; margin-right: 6px; }
 .status-dot.active { background: #10B981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }
 
-.pin-badge { font-size: 0.8rem; padding: 2px 8px; border-radius: 6px; }
+.pin-badge { font-size: 0.8rem; padding: 2px 8px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
 .pin-badge.set { background: #DCFCE7; color: #166534; }
-.pin-badge.not-set { color: #94A3B8; }
+.pin-badge.set:hover { background: #BBF7D0; }
+.pin-badge.not-set { color: #2563EB; background: #EFF6FF; border: 1px dashed #93C5FD; }
+.pin-badge.not-set:hover { background: #DBEAFE; }
+
+.pin-input-wrap { display: flex; gap: 10px; justify-content: center; margin: 16px 0; }
+.pin-digit { width: 52px; height: 60px; text-align: center; font-size: 1.5rem; font-weight: 700; border: 2px solid #E2E8F0; border-radius: 12px; outline: none; transition: border-color 0.2s; background: #F8FAFC; }
+.pin-digit:focus { border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); background: white; }
+.pin-error { color: #EF4444; font-size: 0.8rem; text-align: center; margin-top: 8px; }
 
 .perm-count { font-weight: 700; font-size: 0.9rem; color: #2563EB; }
 .perm-count.full { color: #10B981; }
@@ -311,4 +389,8 @@ async function toggleActive(s) {
 :root.dark .perm-row { border-color: #1E293B; }
 :root.dark .toggle-switch { background: #475569; }
 :root.dark .btn-cancel { background: #1E293B; border-color: #334155; color: #94A3B8; }
+:root.dark .pin-digit { background: #1E293B; border-color: #334155; color: #E2E8F0; }
+:root.dark .pin-digit:focus { border-color: #3B82F6; background: #0F172A; }
+:root.dark .pin-badge.set { background: #064E3B; color: #6EE7B7; }
+:root.dark .pin-badge.not-set { background: #1E293B; border-color: #3B82F6; color: #93C5FD; }
 </style>

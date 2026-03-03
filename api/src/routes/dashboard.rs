@@ -41,6 +41,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/dashboard/staff", get(staff_list))
         .route("/api/dashboard/staff/{id}/permissions", put(staff_update_permissions))
         .route("/api/dashboard/staff/{id}/toggle-active", put(staff_toggle_active))
+        .route("/api/dashboard/staff/{id}/pin", put(staff_update_pin))
         .route("/api/dashboard/inventory/export", get(inventory_export))
         .route("/api/dashboard/notifications", get(notifications))
 }
@@ -679,6 +680,49 @@ async fn staff_toggle_active(
             })))
         }
     }
+}
+
+// ===== API 11d: Update Staff PIN =====
+#[derive(Deserialize)]
+struct PinPayload {
+    pin: String,
+}
+
+async fn staff_update_pin(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i64>,
+    Json(body): Json<PinPayload>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = claims.store_id;
+
+    // Validate PIN format: exactly 4 digits
+    if body.pin.len() != 4 || !body.pin.chars().all(|c| c.is_ascii_digit()) {
+        return Err(AppError::BadRequest("PIN phải là 4 chữ số".into()));
+    }
+
+    let exists = sqlx::query_as::<_, (String,)>(
+        "SELECT role FROM sync_staff_members WHERE store_id = $1 AND id = $2"
+    ).bind(sid).bind(id).fetch_optional(&state.pool).await?;
+
+    match exists {
+        None => return Err(AppError::NotFound("Staff member not found".into())),
+        Some((role,)) if role == "owner" => {
+            return Err(AppError::BadRequest("Cannot change owner PIN from web".into()));
+        }
+        _ => {}
+    }
+
+    sqlx::query(
+        "UPDATE sync_staff_members SET pin = $1, updated_at = NOW() \
+         WHERE store_id = $2 AND id = $3"
+    ).bind(&body.pin).bind(sid).bind(id).execute(&state.pool).await?;
+
+    Ok(Json(json!({
+        "success": true,
+        "message": "Đã cập nhật mã PIN"
+    })))
 }
 
 // ===== API 12: Product Inventory Export (Excel) =====
