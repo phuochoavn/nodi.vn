@@ -30,7 +30,7 @@
               <td>{{ o.supplier_name || '—' }}</td>
               <td class="num">{{ fmt(o.total_amount) }}</td>
               <td><span class="badge" :class="statusClass(o.status)">{{ statusLabel(o.status) }}</span></td>
-              <td>{{ o.import_date || o.created_at?.slice(0, 10) || '—' }}</td>
+              <td>{{ o.import_date || fmtDateOnly(o.created_at) }}</td>
               <td class="note-cell">{{ o.note || '—' }}</td>
             </tr>
           </tbody>
@@ -50,6 +50,7 @@ definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 useHead({ title: 'Nhập hàng — Dashboard' })
 
 const { fetchApi } = useAuth()
+const { fmtDateOnly } = await import('~/utils/date')
 const orders = ref([])
 const total = ref(0)
 const page = ref(1)

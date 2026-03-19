@@ -1,14 +1,44 @@
+interface LoginResponse {
+    success: boolean
+    token: string
+    user: any
+    stores: any[]
+    store_id: string
+    store_name: string
+}
+
+interface SwitchStoreResponse {
+    success: boolean
+    token: string
+    store_id: string
+    store_name: string
+}
+
+interface StoresResponse {
+    stores: any[]
+}
+
+interface CreateStoreResponse {
+    success: boolean
+}
+
+interface FetchOptions {
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+    body?: any
+    headers?: Record<string, string>
+}
+
 export const useAuth = () => {
     const token = useCookie('nodi_token', { maxAge: 86400 })
-    const user = useState('user', () => null)
-    const stores = useState('stores', () => [])
+    const user = useState<any>('user', () => null)
+    const stores = useState<any[]>('stores', () => [])
     const activeStoreId = useCookie('nodi_active_store', { maxAge: 86400 })
     const activeStoreName = useState('activeStoreName', () => '')
 
     const isAuthenticated = computed(() => !!token.value)
 
-    const login = async (username, password) => {
-        const res = await $fetch('/api/login', {
+    const login = async (username: string, password: string) => {
+        const res = await $fetch<LoginResponse>('/api/login', {
             method: 'POST',
             body: { username, password, hwid: '' },
         })
@@ -37,8 +67,8 @@ export const useAuth = () => {
         navigateTo('/login')
     }
 
-    const switchStore = async (storeId) => {
-        const res = await fetchApi('/api/stores/switch', {
+    const switchStore = async (storeId: string) => {
+        const res = await fetchApi<SwitchStoreResponse>('/api/stores/switch', {
             method: 'POST',
             body: { store_id: storeId },
         })
@@ -62,7 +92,7 @@ export const useAuth = () => {
                     : storesCookie.value
                 stores.value = parsed || []
                 // Set active store name
-                const active = parsed.find(s => s.store_id === activeStoreId.value)
+                const active = parsed.find((s: any) => s.store_id === activeStoreId.value)
                 if (active) activeStoreName.value = active.store_name || ''
             } catch (e) {
                 stores.value = []
@@ -72,7 +102,7 @@ export const useAuth = () => {
 
     const refreshStores = async () => {
         try {
-            const res = await fetchApi('/api/stores')
+            const res = await fetchApi<StoresResponse>('/api/stores')
             stores.value = res.stores || []
             const storesCookie = useCookie('nodi_stores', { maxAge: 86400 })
             storesCookie.value = JSON.stringify(res.stores || [])
@@ -81,8 +111,8 @@ export const useAuth = () => {
         }
     }
 
-    const createStore = async (storeName) => {
-        const res = await fetchApi('/api/stores/create', {
+    const createStore = async (storeName: string) => {
+        const res = await fetchApi<CreateStoreResponse>('/api/stores/create', {
             method: 'POST',
             body: { store_name: storeName },
         })
@@ -92,16 +122,16 @@ export const useAuth = () => {
         return res
     }
 
-    const fetchApi = async (url, opts = {}) => {
+    const fetchApi = async <T = any>(url: string, opts: FetchOptions = {}): Promise<T> => {
         const { error: showError } = useToast()
         try {
-            return await $fetch(url, {
+            return await ($fetch as any)(url, {
                 ...opts,
                 headers: {
                     ...opts.headers,
                     Authorization: `Bearer ${token.value}`,
                 },
-            })
+            }) as T
         } catch (e: any) {
             // Auto-redirect to login on 401 (token expired)
             if (e?.response?.status === 401 || e?.status === 401 || e?.statusCode === 401) {

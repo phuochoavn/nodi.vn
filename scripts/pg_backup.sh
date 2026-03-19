@@ -21,3 +21,13 @@ fi
 # Rotation: keep only 7 most recent backups
 ls -t "$BACKUP_DIR"/nodi_*.sql | tail -n +8 | xargs -r rm
 echo "[$(date)] 🗑️ Old backups cleaned. Current count: $(ls "$BACKUP_DIR"/nodi_*.sql | wc -l)"
+
+# === Off-site backup to Google Cloud Storage ===
+if command -v rclone &> /dev/null; then
+    rclone copy "$BACKUP_DIR/" gcs-nodi:nodi-pos-backups/pg/ \
+        --log-file=/opt/nodi/logs/rclone.log \
+        --log-level=NOTICE
+    echo "[$(date)] ☁️ Off-site backup synced to GCS (nodi-pos-backups/pg/)"
+else
+    echo "[$(date)] ⚠️ rclone not found, skipping off-site backup"
+fi

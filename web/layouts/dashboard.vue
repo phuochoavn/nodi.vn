@@ -10,7 +10,7 @@
       <!-- Logo -->
       <div class="flex items-center gap-2 px-4 py-5 border-b border-slate-700/50">
         <NuxtLink to="/dashboard" class="flex items-center gap-2 text-white font-extrabold text-lg overflow-hidden">
-          <img src="/favicon.svg" class="w-8 h-8 flex-shrink-0 brightness-0 invert" alt="" />
+          <NodiLogo :size="32" />
           <Transition enter-active-class="transition-opacity duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100"
                       leave-active-class="transition-opacity duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
             <span v-if="!collapsed" class="whitespace-nowrap">

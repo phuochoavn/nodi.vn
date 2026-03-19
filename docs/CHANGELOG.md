@@ -22,6 +22,55 @@
 
 ---
 
+## 2026-03-15 (Sprint 113 — Infrastructure Hardening & Sync Debug)
+
+> **Mục tiêu:** Tuning PostgreSQL, bảo mật Nginx, debug lỗi 429 + sync field mismatch + WebSocket real-time sync
+> **Kết quả:** 9 items hoàn thành, phối hợp VPS Agent ↔ App Agent debug xuyên suốt
+
+### ✨ FEAT — WebSocket Real-time Sync (`/ws/sync`)
+- Endpoint `GET /ws/sync?token=JWT` — upgrade HTTP→WebSocket, join room theo `store_id`
+- `SyncRooms` hub: room-based broadcast per `store_id`, heartbeat ping/30s
+- Tích hợp `handle_sync()`: sau `tx.commit()` → broadcast `sync_update` event cho all connected clients
+- Event format: `{"type":"sync_update","store_id":X,"collections":["products","orders",...],"timestamp":"..."}`
+- Nginx: thêm `/ws/sync` location block với WebSocket proxy headers
+- Files: `api/src/routes/ws_sync.rs` [NEW], `api/src/main.rs`, `api/src/routes/sync.rs`, `api/src/routes/mod.rs`, `nginx/conf.d/nodi.conf`
+
+### ⚡ PERF — PostgreSQL Tuning (8GB VPS)
+- `shared_buffers`: 128MB → **2GB**, `work_mem`: 4MB → **32MB**
+- `maintenance_work_mem`: 64MB → **256MB**, `random_page_cost`: 4.0 → **1.1** (SSD)
+- `effective_io_concurrency`: 1 → **200**, `wal_buffers`: 4MB → **64MB**
+- Thêm slow query logging (>500ms), autovacuum tuning
+- Docker `shm_size: 2g` cho shared memory
+- Files: `data/postgresql.conf` [NEW], `docker-compose.yml`
+
+### 🔒 SECURITY — Nginx Security Headers + Cloudflare Real IP
+- 7 headers: HSTS, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, CSP
+- Cloudflare Real IP: `set_real_ip_from` cho 15 dải IP + `real_ip_header CF-Connecting-IP`
+- Gỡ bỏ toàn bộ Nginx rate limit (không phù hợp mô hình 1 store = 10 devices cùng IP)
+- Files: `nginx/conf.d/nodi.conf`
+
+### 🐛 FIX — Lỗi 429 Too Many Requests (Root Cause: `tower_governor`)
+- **Triệu chứng:** Mobile app (AgriPOS) bị 429 khi login, sync, pull dữ liệu
+- **Debug path:** Nginx rate limit → Cloudflare WAF → **Rust API `tower_governor`**
+- **Root cause:** `tower_governor` + `SmartIpKeyExtractor` đọc `X-Forwarded-For` từ Cloudflare proxy → tất cả users chung 1 bucket rate limit → 429
+- **Fix:** Gỡ `tower_governor` khỏi `main.rs` + `Cargo.toml`, rebuild Docker API container
+- Files: `api/src/main.rs`, `api/Cargo.toml`
+
+### 🐛 FIX — Sync Pull thiếu `created_at` cho products, customers, suppliers
+- **Nguyên nhân:** `handle_pull()` không SELECT `created_at` cho 3 bảng → mobile SQLite có `NOT NULL` constraint → INSERT fail im lặng → 0 sản phẩm
+- **Fix VPS:** Thêm `synced_at::text` làm `created_at` vào pull response (DB không có column `created_at`, dùng `synced_at` auto-fill by PG)
+- **Fix App:** Agent app thêm fallback `chrono::Local::now()` khi VPS thiếu `created_at` + error logging thay `.ok()`
+- Files: `api/src/routes/sync.rs`
+
+### ✨ FEAT — Xác nhận `GET /api/sync/pull` hoạt động
+- Endpoint trả đầy đủ 21 collections (62 products, 64 units cho store_id=1000004)
+- Báo cáo field mapping chính xác cho agent app đối chiếu: `notes` (không phải `note`), `transaction_type`, `code` (từ `company`)
+
+### 📚 DOCS — Tổ chức lại tài liệu
+- Đổi tên `roadmap/` → `docs/`
+- Cập nhật APK mới → `downloads/Nodi-Pos.apk`
+
+---
 ## 2026-03-03 (Sprint 89 — Staff Permission Management)
 
 > **Mục tiêu:** Đồng bộ nhân viên từ desktop + quản lý quyền từ xa trên web dashboard  

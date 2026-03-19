@@ -15,7 +15,7 @@
             <td>{{ o.customer_name }}</td>
             <td class="num">{{ fmt(o.total_amount) }}</td>
             <td><span class="badge" :class="o.payment_method">{{ o.payment_method }}</span></td>
-            <td>{{ o.created_at?.slice(0,16) }}</td>
+            <td>{{ fmtDateTime(o.created_at) }}</td>
           </tr>
           <tr v-if="orders.length === 0"><td colspan="5" class="empty">Chưa có đơn hàng</td></tr>
         </tbody>
@@ -53,6 +53,7 @@ definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 useHead({ title: 'Đơn hàng — Dashboard' })
 
 const { fetchApi } = useAuth()
+const { fmtDateTime } = await import('~/utils/date')
 const orders = ref([])
 const total = ref(0)
 const page = ref(1)
@@ -72,6 +73,7 @@ async function showDetail(id) {
 
 onMounted(load)
 function fmt(v) { return new Intl.NumberFormat('vi-VN').format(v || 0) + 'đ' }
+
 </script>
 
 <style scoped>

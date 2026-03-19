@@ -21,7 +21,7 @@
             <td>{{ typeLabel(l.license_type) }}</td>
             <td><span class="badge" :class="l.status">{{ statusLabel(l.status) }}</span></td>
             <td>{{ l.store_name || '—' }}</td>
-            <td>{{ l.expires_at?.slice(0,10) || '—' }}</td>
+            <td>{{ fmtDateOnly(l.expires_at) }}</td>
             <td :class="remainClass(l)">{{ remainLabel(l) }}</td>
             <td><span :class="l.has_recent_payment ? 'pay-ok' : 'pay-no'">{{ l.has_recent_payment ? '💰' : '⚠️' }}</span></td>
             <td class="actions" @click.stop>
@@ -68,7 +68,7 @@
             <option :value="365">365 ngày</option>
           </select>
         </div>
-        <div class="duration-info">📆 Hết hạn hiện tại: <strong>{{ showExtend.expires_at?.slice(0,10) || 'Chưa set' }}</strong><br>📆 Hết hạn mới: <strong>{{ newExpiry }}</strong></div>
+        <div class="duration-info">📆 Hết hạn hiện tại: <strong>{{ fmtDateOnly(showExtend.expires_at) }}</strong><br>📆 Hết hạn mới: <strong>{{ newExpiry }}</strong></div>
         <button class="btn btn-primary" @click="doExtend" :disabled="extending" style="width:100%;justify-content:center;">{{ extending ? 'Đang gia hạn...' : 'Gia hạn' }}</button>
       </div>
     </div>
@@ -103,8 +103,8 @@
         <div class="detail-grid">
           <div><strong>Gói:</strong> {{ typeLabel(detailLicense.license_type) }}</div>
           <div><strong>Cửa hàng:</strong> {{ detailLicense.store_name || '—' }}</div>
-          <div><strong>Hết hạn:</strong> {{ detailLicense.expires_at?.slice(0,10) || '—' }}</div>
-          <div><strong>Kích hoạt:</strong> {{ detailLicense.activated_at?.slice(0,10) || '—' }}</div>
+          <div><strong>Hết hạn:</strong> {{ fmtDateOnly(detailLicense.expires_at) }}</div>
+          <div><strong>Kích hoạt:</strong> {{ fmtDateOnly(detailLicense.activated_at) }}</div>
           <div><strong>Còn lại:</strong> {{ remainLabel(detailLicense) }}</div>
           <div><strong>HWID:</strong> {{ detailLicense.hwid?.slice(0,20) || '—' }}</div>
         </div>
@@ -113,7 +113,7 @@
           <thead><tr><th>Ngày</th><th>Số tiền</th><th>PT</th><th>Ghi chú</th></tr></thead>
           <tbody>
             <tr v-for="p in detailPayments" :key="p.id">
-              <td>{{ p.created_at?.slice(0,10) }}</td>
+              <td>{{ fmtDateOnly(p.created_at) }}</td>
               <td class="mono">{{ fmtMoney(p.amount) }}</td>
               <td>{{ methodLabel(p.payment_method) }}</td>
               <td>{{ p.note || '—' }}</td>
@@ -134,6 +134,7 @@
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'License Manager — Admin' })
 const { fetchApi } = useAuth()
+const { fmtDateOnly } = await import('~/utils/date')
 const licenses = ref([])
 const stats = ref({ total: 0, active: 0, expired: 0, revoked: 0, pending: 0 })
 const showCreate = ref(false)

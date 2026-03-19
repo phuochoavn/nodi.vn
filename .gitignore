@@ -14,9 +14,24 @@ data/
 backups/
 pg_backups/
 logs/
+uploads/
 
 # Environment secrets
 .env
+
+# Service Account credentials (NEVER commit)
+credentials/
+nodi-backup-*.json
+
+# Temp test files
+pull_*.json
+
+# Large binary files (served by nginx, not git)
+downloads/
+
+# Binary/image assets not for git
+logo/
+project/legal/image/
 
 # SSL private keys (NEVER commit)
 nginx/ssl/*.key

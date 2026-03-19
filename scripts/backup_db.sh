@@ -27,3 +27,13 @@ fi
 # Cleanup old backups (older than $DAYS_KEEP days)
 find "$BACKUP_DIR" -name "nodi_db_*.sql.gz" -mtime +$DAYS_KEEP -delete
 echo "[$(date)] 🧹 Cleaned backups older than $DAYS_KEEP days"
+
+# === Off-site backup to Google Cloud Storage ===
+if command -v rclone &> /dev/null; then
+    rclone copy "$BACKUP_DIR/" gcs-nodi:nodi-pos-backups/db/ \
+        --log-file=/opt/nodi/logs/rclone.log \
+        --log-level=NOTICE
+    echo "[$(date)] ☁️ Off-site backup synced to GCS (nodi-pos-backups/db/)"
+else
+    echo "[$(date)] ⚠️ rclone not found, skipping off-site backup"
+fi

@@ -1,4 +1,4 @@
-use axum::{Router, Json, extract::{State, Path, Query}, routing::{get, put}};
+use axum::{Router, Json, extract::{State, Path, Query}, routing::{get, put, post}};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::http::header;
@@ -44,6 +44,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/dashboard/staff/{id}/pin", put(staff_update_pin))
         .route("/api/dashboard/inventory/export", get(inventory_export))
         .route("/api/dashboard/notifications", get(notifications))
+        .route("/api/dashboard/force-resync", post(force_resync))
 }
 
 // ===== API 1: Overview =====
@@ -91,11 +92,11 @@ async fn overview(
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let debt_customers: (i64,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_customers WHERE store_id = $1 AND current_debt > 0"
+        "SELECT COALESCE(SUM(total_debt)::bigint, 0) FROM synced_customers WHERE store_id = $1 AND total_debt > 0"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let debt_suppliers: (i64,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_suppliers WHERE store_id = $1 AND current_debt > 0"
+        "SELECT COALESCE(SUM(total_debt)::bigint, 0) FROM synced_suppliers WHERE store_id = $1 AND total_debt > 0"
     ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
     let store_balance: Option<(Option<i64>,)> = sqlx::query_as(
@@ -307,26 +308,26 @@ async fn debts(
 
     if dtype == "supplier" {
         let rows = sqlx::query_as::<_, (i32, Option<String>, Option<String>, Option<f64>, Option<String>)>(
-            "SELECT local_id, name, phone, current_debt, supplier_type FROM synced_suppliers WHERE store_id = $1 AND current_debt > 0 ORDER BY current_debt DESC"
+            "SELECT local_id, name, phone, total_debt::FLOAT8, company FROM synced_suppliers WHERE store_id = $1 AND total_debt > 0 ORDER BY total_debt DESC"
         ).bind(sid).fetch_all(&state.pool).await?;
 
         let total: (i64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_suppliers WHERE store_id = $1 AND current_debt > 0"
+            "SELECT COALESCE(SUM(total_debt)::bigint, 0) FROM synced_suppliers WHERE store_id = $1 AND total_debt > 0"
         ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
         let debts: Vec<Value> = rows.iter().map(|r| json!({
             "id": r.0, "name": r.1, "phone": r.2,
-            "current_debt": r.3, "type": r.4
+            "current_debt": r.3, "company": r.4
         })).collect();
 
         Ok(Json(json!({ "debts": debts, "total_debt": total.0, "count": debts.len() })))
     } else {
         let rows = sqlx::query_as::<_, (i32, Option<String>, Option<String>, Option<f64>, Option<f64>)>(
-            "SELECT local_id, name, phone, current_debt, credit_limit FROM synced_customers WHERE store_id = $1 AND current_debt > 0 ORDER BY current_debt DESC"
+            "SELECT local_id, name, phone, total_debt::FLOAT8, credit_limit::FLOAT8 FROM synced_customers WHERE store_id = $1 AND total_debt > 0 ORDER BY total_debt DESC"
         ).bind(sid).fetch_all(&state.pool).await?;
 
         let total: (i64,) = sqlx::query_as(
-            "SELECT COALESCE(SUM(current_debt)::bigint, 0) FROM synced_customers WHERE store_id = $1 AND current_debt > 0"
+            "SELECT COALESCE(SUM(total_debt)::bigint, 0) FROM synced_customers WHERE store_id = $1 AND total_debt > 0"
         ).bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
 
         let debts: Vec<Value> = rows.iter().map(|r| json!({
@@ -870,5 +871,57 @@ async fn notifications(
     Ok(Json(json!({
         "notifications": notifs,
         "count": notifs.len(),
+    })))
+}
+
+// ===== API 14: Force Re-Sync =====
+async fn force_resync(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let sid = claims.store_id;
+
+    // Clear server-side sync state so device will re-push everything
+    let inbox_deleted: u64 = sqlx::query("DELETE FROM sync_inbox WHERE store_id = $1")
+        .bind(sid).execute(&state.pool).await?.rows_affected();
+
+    let journal_deleted: u64 = sqlx::query("DELETE FROM sync_journal WHERE store_id = $1")
+        .bind(sid).execute(&state.pool).await?.rows_affected();
+
+    // Reset device pull cursors
+    sqlx::query("UPDATE sync_devices SET pull_cursor = 0 WHERE store_id = $1")
+        .bind(sid).execute(&state.pool).await?;
+
+    // Broadcast request_full_sync via WebSocket to all connected devices
+    let msg = serde_json::json!({
+        "type": "request_full_sync",
+        "store_id": sid,
+        "message": "Server requests full data re-sync"
+    }).to_string();
+
+    let ws_count = {
+        let rooms = state.sync_rooms.read().await;
+        if let Some(clients) = rooms.get(&sid) {
+            for tx in clients {
+                let _ = tx.send(msg.clone());
+            }
+            clients.len()
+        } else {
+            0
+        }
+    };
+
+    tracing::info!("🔄 Force re-sync: store_id={}, inbox_cleared={}, journal_cleared={}, ws_notified={}",
+        sid, inbox_deleted, journal_deleted, ws_count);
+
+    Ok(Json(json!({
+        "success": true,
+        "message": format!("Đã xóa {} inbox, {} journal records. Đã gửi yêu cầu re-sync đến {} thiết bị.", inbox_deleted, journal_deleted, ws_count),
+        "data": {
+            "inbox_cleared": inbox_deleted,
+            "journal_cleared": journal_deleted,
+            "devices_notified": ws_count
+        }
     })))
 }

@@ -33,7 +33,7 @@
               <p>
                 Nodi POS được sinh ra từ thực tế ấy. Không phải phần mềm POS phổ thông rồi "gắn thêm" tính năng, 
                 mà được <strong class="text-slate-900 dark:text-white font-medium">thiết kế từ gốc</strong> cho đại lý vật tư — 
-                từ quản lý lô hàng FEFO, dual-mode thuế, đến trợ lý AI có thể chẩn đoán bệnh cây trồng ngay tại quầy.
+                từ quản lý hàng hóa theo lô và hạn sử dụng, tách riêng hóa đơn thuế và bán lẻ, đến trợ lý AI có thể tư vấn bệnh cây trồng ngay tại quầy.
               </p>
             </div>
           </div>
@@ -59,7 +59,7 @@
       <div class="container relative z-10">
         <div class="text-center mb-16 reveal">
           <h2 class="section-title">Tất cả trong <span class="text-gradient">một ứng dụng</span></h2>
-          <p class="section-subtitle">16 nhóm tính năng chuyên sâu, bao phủ mọi nghiệp vụ cửa hàng VTNN</p>
+          <p class="section-subtitle">Từ bán hàng, kho, thuế đến báo cáo — tất cả nghiệp vụ đều có sẵn</p>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div v-for="(cap, i) in capabilities" :key="cap.title"
@@ -75,7 +75,7 @@
         </div>
         <div class="text-center mt-12 reveal">
           <NuxtLink to="/tinh-nang" class="btn btn-outline border-slate-300 dark:border-slate-600 hover:border-primary">
-            Xem chi tiết 16+ tính năng
+            Xem chi tiết tất cả tính năng
             <ArrowRight :size="16" />
           </NuxtLink>
         </div>
@@ -84,54 +84,52 @@
 
     <div class="section-divider"></div>
 
-    <!-- HĐĐT & Tax — Highlight Section -->
+    <!-- Offline & Cloud — Highlight Section -->
     <section class="py-16 md:py-24 bg-gradient-to-br from-slate-900 via-[#0a1128] to-slate-900 relative overflow-hidden">
       <div class="absolute inset-0 bg-grid-dots opacity-10 mix-blend-overlay"></div>
       <div class="absolute top-1/4 left-0 w-[500px] h-[500px] bg-green-500/10 rounded-full blur-[100px] -translate-x-1/2 pointer-events-none"></div>
-      <div class="absolute bottom-0 right-0 w-[400px] h-[400px] bg-amber-500/10 rounded-full blur-[100px] translate-x-1/3 pointer-events-none"></div>
+      <div class="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px] translate-x-1/3 pointer-events-none"></div>
 
       <div class="container relative z-10">
         <div class="text-center mb-16 reveal">
-          <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm font-bold mb-6">
-            <FileText :size="16" />
-            Hóa đơn điện tử & Thuế
+          <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-bold mb-6">
+            <WifiOff :size="16" />
+            Offline-first
           </div>
           <h2 class="text-3xl md:text-5xl font-black text-white tracking-tight mb-6">
-            Yên tâm về thuế, <br class="hidden md:block" />
-            <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">tập trung kinh doanh</span>
+            Mạng chập chờn? <br class="hidden md:block" />
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Không vấn đề gì</span>
           </h2>
           <p class="text-lg md:text-xl text-slate-300 max-w-3xl mx-auto font-light leading-relaxed">
-            Nodi POS là phần mềm POS nông nghiệp duy nhất có hệ thống thuế Dual-Mode — giúp bạn 
-            tách riêng doanh thu có hóa đơn VAT và bán lẻ, tự động tính thuế, cảnh báo ngưỡng, 
-            và xuất hóa đơn điện tử ngay tại quầy.
+            Nodi POS chạy hoàn toàn trên máy tính của bạn. Không cần internet để bán hàng, 
+            không phụ thuộc server. Dữ liệu tự đồng sao lưu lên đám mây khi có mạng.
           </p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          <div v-for="(tax, i) in taxFeatures" :key="tax.title"
+          <div v-for="(item, i) in offlineFeatures" :key="item.title"
                class="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-green-500/30 transition-all duration-300 reveal"
                :class="`reveal-delay-${(i % 3) + 1}`">
             <div class="w-12 h-12 mb-5 rounded-xl flex items-center justify-center"
-                 :class="tax.bgClass">
-              <component :is="tax.iconComponent" :size="24" :class="tax.iconClass" />
+                 :class="item.bgClass">
+              <component :is="item.iconComponent" :size="24" :class="item.iconClass" />
             </div>
-            <h3 class="text-xl font-bold text-white mb-3">{{ tax.title }}</h3>
-            <p class="text-slate-300 text-sm leading-relaxed">{{ tax.desc }}</p>
+            <h3 class="text-xl font-bold text-white mb-3">{{ item.title }}</h3>
+            <p class="text-slate-300 text-sm leading-relaxed">{{ item.desc }}</p>
           </div>
         </div>
 
-        <!-- Tax Knowledge Highlight -->
+        <!-- Highlighted stat -->
         <div class="reveal">
-          <div class="bg-gradient-to-r from-amber-500/10 to-green-500/10 border border-amber-500/20 rounded-2xl p-8 md:p-10 flex flex-col md:flex-row gap-8 items-center">
-            <div class="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-500 flex items-center justify-center flex-shrink-0 shadow-xl shadow-amber-500/20">
-              <GraduationCap :size="40" class="text-white" />
+          <div class="bg-gradient-to-r from-blue-500/10 to-green-500/10 border border-blue-500/20 rounded-2xl p-8 md:p-10 flex flex-col md:flex-row gap-8 items-center">
+            <div class="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0 shadow-xl shadow-blue-500/20">
+              <Cloud :size="40" class="text-white" />
             </div>
             <div class="flex-1 text-center md:text-left">
-              <h3 class="text-2xl font-black text-white mb-3">125+ Kiến thức thuế tích hợp sẵn</h3>
+              <h3 class="text-2xl font-black text-white mb-3">Máy hư không mất dữ liệu</h3>
               <p class="text-slate-300 leading-relaxed">
-                Hỏi AI về VAT thuốc BVTV, thuế suất phân bón, Nghị định 123, hóa đơn đầu vào, kê khai thuế khoán, 
-                giấy phép kinh doanh BVTV — tất cả đều có sẵn trong app. Không cần google, không cần hỏi kế toán. 
-                AI trả lời bằng <strong class="text-white">tiếng Việt dễ hiểu</strong>, kèm căn cứ pháp lý cụ thể.
+                Dữ liệu được tự động sao lưu lên đám mây. Nếu máy tính gặp sự cố, bạn chỉ cần cài lại app và khôi phục — 
+                toàn bộ khách hàng, hàng hóa, đơn hàng <strong class="text-white">trở lại như cũ</strong> chỉ với 1 click.
               </p>
             </div>
           </div>
@@ -144,8 +142,8 @@
       <div class="absolute bottom-0 left-0 w-[600px] h-[600px] bg-violet-500/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
       <div class="container relative z-10">
         <div class="text-center mb-16 reveal">
-          <h2 class="section-title">Trợ lý AI <span class="text-gradient">thông minh nhất</span> ngành POS</h2>
-          <p class="section-subtitle">100% offline, tiếng Việt tự nhiên, 46 lệnh, 315+ bệnh cây trồng</p>
+          <h2 class="section-title">Trợ lý AI <span class="text-gradient">hiểu ngành nông nghiệp</span></h2>
+          <p class="section-subtitle">Nói tiếng Việt, hoạt động không cần mạng, hỗ trợ bán hàng và tư vấn cây trồng</p>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -200,8 +198,8 @@
     <section class="py-16 md:py-24 relative overflow-hidden">
       <div class="container relative z-10">
         <div class="text-center mb-16 reveal">
-          <h2 class="section-title">Nền tảng công nghệ <span class="text-gradient">tiên tiến</span></h2>
-          <p class="section-subtitle">Desktop native Tauri v2 — nhanh, ổn định, bảo mật</p>
+          <h2 class="section-title">Tại sao chọn <span class="text-gradient">Nodi POS?</span></h2>
+          <p class="section-subtitle">Phần mềm chạy trực tiếp trên máy tính — nhanh, ổn định, không phụ thuộc internet</p>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div v-for="(tech, i) in techs" :key="tech.title"
@@ -254,7 +252,7 @@ import {
   Warehouse, DollarSign, BarChart3, Users, Cloud, Shield,
   Cpu, Database, Zap, Check, AlertTriangle, Receipt, Monitor,
   Calculator, ClipboardList, Settings, MessageSquare, Bug,
-  BookOpen, Search, TrendingUp, Sprout
+  BookOpen, Search, TrendingUp, Sprout, RefreshCw
 } from 'lucide-vue-next'
 
 useHead({
@@ -266,57 +264,57 @@ useHead({
 })
 
 const stats = [
-  { value: '5700+', label: 'Sản phẩm BVTV' },
-  { value: '315+', label: 'Bệnh cây trồng' },
-  { value: '46', label: 'Lệnh AI thông minh' },
+  { value: '46+', label: 'Lệnh AI thông minh' },
+  { value: '< 5s', label: 'Tạo hóa đơn' },
+  { value: '0đ', label: 'Phí dùng thử' },
   { value: '100%', label: 'Hoạt động Offline' },
 ]
 
 const capabilities = [
-  { iconComponent: ShoppingCart, title: 'Bán hàng POS', desc: 'Tạo hóa đơn trong 5 giây, quét mã, VietQR Napas', bgClass: 'bg-green-500/10', iconClass: 'text-green-500' },
-  { iconComponent: Warehouse, title: 'Quản lý kho', desc: 'Lô hàng, FEFO, hạn sử dụng, catalog 5700+ SP', bgClass: 'bg-blue-500/10', iconClass: 'text-blue-500' },
-  { iconComponent: Package, title: 'Nhập hàng & NCC', desc: 'Phiếu nhập, công nợ NCC, tự động cập nhật kho', bgClass: 'bg-violet-500/10', iconClass: 'text-violet-500' },
-  { iconComponent: DollarSign, title: 'Công nợ KH', desc: 'Ghi nợ, thu nợ, phân khúc VIP, timeline', bgClass: 'bg-amber-500/10', iconClass: 'text-amber-500' },
-  { iconComponent: FileText, title: 'Hóa đơn điện tử', desc: 'VNPT S-Invoice, Viettel, xuất XML eTax', bgClass: 'bg-rose-500/10', iconClass: 'text-rose-500' },
-  { iconComponent: Calculator, title: 'Thuế & Dual-Mode', desc: 'Tách riêng có HĐ / không HĐ, VAT 0-5-10%', bgClass: 'bg-orange-500/10', iconClass: 'text-orange-500' },
-  { iconComponent: BarChart3, title: 'Báo cáo', desc: 'Doanh thu, lợi nhuận, so sánh, biểu đồ', bgClass: 'bg-cyan-500/10', iconClass: 'text-cyan-500' },
-  { iconComponent: Bot, title: 'Trợ lý AI', desc: '46 lệnh, 315+ bệnh, self-learning, 100% offline', bgClass: 'bg-purple-500/10', iconClass: 'text-purple-500' },
-  { iconComponent: Users, title: 'Nhân viên', desc: 'PIN 4 số, 9 quyền, RBAC, đổi ca nhanh', bgClass: 'bg-teal-500/10', iconClass: 'text-teal-500' },
-  { iconComponent: ClipboardList, title: 'Đơn hàng & Trả hàng', desc: 'Lịch sử, filter VAT, in lại, return', bgClass: 'bg-pink-500/10', iconClass: 'text-pink-500' },
-  { iconComponent: Cloud, title: 'Cloud Sync', desc: 'Offline-first, backup tự động, khôi phục 1 click', bgClass: 'bg-sky-500/10', iconClass: 'text-sky-500' },
-  { iconComponent: Settings, title: 'Cài đặt & OTA', desc: 'Dark mode, cập nhật tự động, log hệ thống', bgClass: 'bg-slate-500/10', iconClass: 'text-slate-500' },
+  { iconComponent: ShoppingCart, title: 'Bán hàng nhanh', desc: 'Quét mã, tính tiền, thanh toán QR — dưới 5 giây', bgClass: 'bg-green-500/10', iconClass: 'text-green-500' },
+  { iconComponent: Warehouse, title: 'Quản lý kho', desc: 'Theo dõi tồn kho, lô hàng, hạn sử dụng tự động', bgClass: 'bg-blue-500/10', iconClass: 'text-blue-500' },
+  { iconComponent: Package, title: 'Nhập hàng', desc: 'Tạo phiếu nhập, quản lý nhà cung cấp, cập nhật kho', bgClass: 'bg-violet-500/10', iconClass: 'text-violet-500' },
+  { iconComponent: DollarSign, title: 'Công nợ', desc: 'Ghi nợ, thu nợ, lịch sử chi tiết cho từng khách', bgClass: 'bg-amber-500/10', iconClass: 'text-amber-500' },
+  { iconComponent: FileText, title: 'Hóa đơn & In ấn', desc: 'In hóa đơn bán hàng, phiếu nhập, phiếu công nợ', bgClass: 'bg-rose-500/10', iconClass: 'text-rose-500' },
+  { iconComponent: BarChart3, title: 'Báo cáo', desc: 'Xem doanh thu, lợi nhuận, so sánh các khoảng thời gian', bgClass: 'bg-cyan-500/10', iconClass: 'text-cyan-500' },
+  { iconComponent: Bot, title: 'Trợ lý AI', desc: 'Bán hàng bằng chat, tư vấn bệnh cây, tra cứu nhanh', bgClass: 'bg-purple-500/10', iconClass: 'text-purple-500' },
+  { iconComponent: Users, title: 'Nhân viên', desc: 'Phân quyền rõ ràng, ai làm gì biết nấy', bgClass: 'bg-teal-500/10', iconClass: 'text-teal-500' },
+  { iconComponent: ClipboardList, title: 'Đơn hàng', desc: 'Lịch sử mua bán, trả hàng, in lại hóa đơn', bgClass: 'bg-pink-500/10', iconClass: 'text-pink-500' },
+  { iconComponent: Cloud, title: 'Sao lưu đám mây', desc: 'Tự động sao lưu, máy hư không mất dữ liệu', bgClass: 'bg-sky-500/10', iconClass: 'text-sky-500' },
+  { iconComponent: DollarSign, title: 'Sổ thu chi', desc: 'Ghi nhận thu/chi ngoài bán hàng, kiểm soát dòng tiền', bgClass: 'bg-orange-500/10', iconClass: 'text-orange-500' },
+  { iconComponent: Settings, title: 'Cập nhật tự động', desc: 'Luôn có phiên bản mới nhất, không cần cài lại', bgClass: 'bg-slate-500/10', iconClass: 'text-slate-500' },
 ]
 
-const taxFeatures = [
+const offlineFeatures = [
   {
-    iconComponent: Receipt, title: 'Dual-Mode hóa đơn',
-    desc: 'Mỗi đơn hàng bạn chọn: xuất hóa đơn VAT hay bán lẻ không khai thuế. Hệ thống tự tách riêng báo cáo — kế toán rõ ràng, kiểm tra thuế yên tâm.',
-    bgClass: 'bg-amber-500/20', iconClass: 'text-amber-400',
-  },
-  {
-    iconComponent: BarChart3, title: 'Bảng VAT chi tiết',
-    desc: 'Phân tách doanh thu theo thuế suất 0%, 5%, 10% cho từng tháng. Xuất bảng kê thuế đầu ra sẵn sàng nộp cho cơ quan thuế.',
-    bgClass: 'bg-green-500/20', iconClass: 'text-green-400',
-  },
-  {
-    iconComponent: AlertTriangle, title: 'Cảnh báo ngưỡng doanh thu',
-    desc: 'Tự động nhắc khi doanh thu gần ngưỡng 500 triệu (thuế khoán) hoặc 1 tỷ (bắt buộc HĐĐT). Không bao giờ bị phạt vì chậm chuyển đổi.',
-    bgClass: 'bg-red-500/20', iconClass: 'text-red-400',
-  },
-  {
-    iconComponent: FileText, title: 'Hóa đơn điện tử tích hợp',
-    desc: 'Kết nối trực tiếp VNPT S-Invoice, Viettel, CK-S. Phát hành HĐĐT ngay tại màn hình bán hàng — không cần mở thêm phần mềm nào.',
+    iconComponent: WifiOff, title: 'Không cần internet',
+    desc: 'Toàn bộ dữ liệu nằm ngay trên máy tính của bạn. Mạng chậm, mất mạng — vẫn bán hàng bình thường, không gián đoạn.',
     bgClass: 'bg-blue-500/20', iconClass: 'text-blue-400',
   },
   {
-    iconComponent: BookOpen, title: 'Xuất XML chuẩn eTax',
-    desc: 'Xuất file XML hóa đơn theo chuẩn Tổng cục Thuế, import miễn phí vào eTax. Tiết kiệm chi phí cho cửa hàng nhỏ mới phát hành HĐĐT.',
+    iconComponent: Cloud, title: 'Tự đồng sao lưu',
+    desc: 'Khi có mạng, dữ liệu tự đồng đồng bộ lên đám mây. Lên lịch backup tự động, không cần nhớ.',
+    bgClass: 'bg-green-500/20', iconClass: 'text-green-400',
+  },
+  {
+    iconComponent: Zap, title: 'Nhanh như ứng dụng bàn',
+    desc: 'Không phải web trình duyệt chậm chạp. Nodi là app cài trên máy, khởi động 2 giây, thao tác mượt mà.',
     bgClass: 'bg-violet-500/20', iconClass: 'text-violet-400',
   },
   {
-    iconComponent: Calculator, title: 'Gán thuế suất từng SP',
-    desc: 'Mỗi sản phẩm gán thuế suất riêng: 0% cho giống cây, 5% cho thuốc BVTV, 10% cho vật dụng. Tính thuế chính xác từng đồng.',
+    iconComponent: Shield, title: 'Dữ liệu an toàn',
+    desc: 'Dữ liệu lưu trên máy của bạn, không ai truy cập được. Mã hóa bảo mật, xác thực riêng từng máy tính.',
+    bgClass: 'bg-amber-500/20', iconClass: 'text-amber-400',
+  },
+  {
+    iconComponent: RefreshCw, title: 'Khôi phục 1 click',
+    desc: 'Đổi máy mới? Cài app, đăng nhập, khôi phục từ cloud — toàn bộ dữ liệu trở lại nguyên vẹn.',
     bgClass: 'bg-cyan-500/20', iconClass: 'text-cyan-400',
+  },
+  {
+    iconComponent: Monitor, title: 'Cập nhật tự động',
+    desc: 'Tính năng mới được cập nhật ngay trong app, không cần tải lại từ đầu. Luôn có phiên bản mới nhất.',
+    bgClass: 'bg-rose-500/20', iconClass: 'text-rose-400',
   },
 ]
 
@@ -328,18 +326,18 @@ const chatDemo = [
 ]
 
 const aiCapabilities = [
-  { iconComponent: ShoppingCart, title: 'Bán hàng bằng chat', desc: '"Lấy 3 bao phân NPK" → AI thêm đúng SP vào giỏ, đúng đơn vị, đúng giá', bgClass: 'bg-green-500/10', iconClass: 'text-green-500' },
-  { iconComponent: Bug, title: 'Chẩn đoán bệnh cây', desc: '315+ bệnh trên Lúa, Sầu riêng, Cà phê, Cam quýt, Rau — hỏi triệu chứng, AI gợi thuốc trong kho', bgClass: 'bg-rose-500/10', iconClass: 'text-rose-500' },
-  { iconComponent: Search, title: 'Tra cứu mọi thứ', desc: '"Doanh thu tháng 2?", "Khách nợ nhiều nhất?", "Hàng sắp hết hạn?" — AI trả lời tức thì', bgClass: 'bg-blue-500/10', iconClass: 'text-blue-500' },
-  { iconComponent: GraduationCap, title: 'Kiến thức thuế', desc: '125+ chủ đề: VAT, PIT, CIT, NĐ 123, giấy phép BVTV — trả lời bằng tiếng Việt kèm căn cứ pháp lý', bgClass: 'bg-amber-500/10', iconClass: 'text-amber-500' },
-  { iconComponent: Sprout, title: 'Cảnh báo mùa vụ', desc: 'Tự động nhắc sâu bệnh theo mùa trong năm, gợi ý SP cross-sell phù hợp mùa vụ', bgClass: 'bg-teal-500/10', iconClass: 'text-teal-500' },
-  { iconComponent: TrendingUp, title: 'Self-Learning', desc: 'Học từ feedback 👍/👎 của chính bạn, 7-Layer Fallback — AI luôn có câu trả lời thông minh', bgClass: 'bg-violet-500/10', iconClass: 'text-violet-500' },
+  { iconComponent: ShoppingCart, title: 'Bán hàng bằng chat', desc: 'Nói "lấy 3 bao phân NPK" — AI tự thêm đúng sản phẩm, đúng giá vào giỏ hàng', bgClass: 'bg-green-500/10', iconClass: 'text-green-500' },
+  { iconComponent: Bug, title: 'Tư vấn bệnh cây trồng', desc: 'Mô tả triệu chứng, AI gợi ý bệnh và thuốc phù hợp có sẵn trong kho', bgClass: 'bg-rose-500/10', iconClass: 'text-rose-500' },
+  { iconComponent: Search, title: 'Tra cứu nhanh', desc: '"Doanh thu tháng này?", "Ai nợ nhiều nhất?", "Hàng sắp hết hạn?" — hỏi gì cũng trả lời', bgClass: 'bg-blue-500/10', iconClass: 'text-blue-500' },
+  { iconComponent: GraduationCap, title: 'Kiến thức nông nghiệp', desc: 'Hỏi về cách dùng thuốc, liều lượng, thời điểm phun — AI trả lời tiếng Việt dễ hiểu', bgClass: 'bg-amber-500/10', iconClass: 'text-amber-500' },
+  { iconComponent: Sprout, title: 'Nhắc nhở mùa vụ', desc: 'Tự nhắc sâu bệnh theo mùa, gợi ý sản phẩm phù hợp thời điểm', bgClass: 'bg-teal-500/10', iconClass: 'text-teal-500' },
+  { iconComponent: TrendingUp, title: 'Càng dùng càng thông minh', desc: 'AI tự học từ cách bạn sử dụng, ngày qua ngày trả lời chính xác hơn', bgClass: 'bg-violet-500/10', iconClass: 'text-violet-500' },
 ]
 
 const techs = [
-  { iconComponent: Cpu, title: 'Tauri v2 (Rust)', desc: 'Backend Rust native — khởi động 2s, chiếm ít RAM, bảo mật cao.' },
-  { iconComponent: Database, title: 'SQLite + Cloud', desc: 'Database local tốc độ cực nhanh, đồng bộ PostgreSQL cloud khi có mạng.' },
-  { iconComponent: Zap, title: 'Vue 3 + TypeScript', desc: 'Giao diện hiện đại, responsive, Composition API hiệu năng cao.' },
-  { iconComponent: Shield, title: 'Bảo mật đa lớp', desc: 'JWT + HWID + License key — xác thực bảo mật, chống crack.' },
+  { iconComponent: Zap, title: 'Mở là chạy ngay', desc: 'Phần mềm chạy trực tiếp trên máy tính, khởi động chỉ 2 giây, không chờ đợi.' },
+  { iconComponent: Database, title: 'Dữ liệu luôn an toàn', desc: 'Lưu trữ ngay trên máy để tốc độ nhanh nhất, tự đồng bộ lên đám mây khi có mạng.' },
+  { iconComponent: Monitor, title: 'Giao diện dễ dùng', desc: 'Thiết kế hiện đại, hỗ trợ chế độ sáng/tối, dùng được ngay không cần đào tạo.' },
+  { iconComponent: Shield, title: 'Bảo mật cao', desc: 'Dữ liệu được mã hóa, mỗi máy tính xác thực riêng, không ai truy cập trái phép.' },
 ]
 </script>

@@ -172,7 +172,7 @@
               <tr v-for="b in cf.store_balances" :key="b.store_id">
                 <td>{{ b.store_name || `Store #${b.store_id}` }}</td>
                 <td class="num" :class="{ 'text-green': b.balance > 0, 'text-red': b.balance < 0 }">{{ fmtCurrency(b.balance) }}</td>
-                <td>{{ b.updated_at?.slice(0, 10) || '—' }}</td>
+                <td>{{ fmtDateOnly(b.updated_at) }}</td>
               </tr>
             </tbody>
           </table>
@@ -191,6 +191,7 @@ definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Thị trường — Admin' })
 
 const { fetchApi } = useAuth()
+const { fmtDateOnly } = await import('~/utils/date')
 const tab = ref('overview')
 const months = ref(12)
 

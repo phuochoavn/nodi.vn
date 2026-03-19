@@ -9,7 +9,7 @@
           <tr v-for="b in backups" :key="b.id">
             <td>{{ b.filename }}</td>
             <td>{{ (b.size_bytes / 1024).toFixed(1) }} KB</td>
-            <td>{{ b.created_at?.slice(0, 19) }}</td>
+            <td>{{ fmtDateTime(b.created_at) }}</td>
             <td><button class="btn-sm" @click="download(b)">⬇️ Tải</button></td>
           </tr>
           <tr v-if="backups.length === 0"><td colspan="4" class="empty">Chưa có backup. Hãy backup từ ứng dụng POS.</td></tr>
@@ -24,6 +24,7 @@ definePageMeta({ layout: 'dashboard', middleware: 'auth' })
 useHead({ title: 'Backup — Dashboard' })
 
 const { fetchApi, token } = useAuth()
+const { fmtDateTime } = await import('~/utils/date')
 const backups = ref([])
 
 onMounted(async () => {

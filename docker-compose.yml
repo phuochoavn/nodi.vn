@@ -13,6 +13,7 @@ services:
       - ./logs/nginx:/var/log/nginx
       - ./uploads:/opt/nodi/uploads:ro
       - ./backups:/opt/nodi/backups:ro
+      - ./downloads:/opt/nodi/downloads:ro
     depends_on:
       - postgres
       - axum-api
@@ -24,15 +25,18 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: nodi-postgres
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     environment:
       POSTGRES_DB: nodi
       POSTGRES_USER: nodi_admin
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+      - ./data/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "127.0.0.1:5432:5432"
+    shm_size: '2g'
     restart: unless-stopped
     networks:
       - nodi-network
@@ -53,6 +57,7 @@ services:
     volumes:
       - ./backups:/opt/nodi/backups
       - ./uploads:/opt/nodi/uploads
+      - ./downloads:/opt/nodi/downloads
     restart: unless-stopped
     networks:
       - nodi-network

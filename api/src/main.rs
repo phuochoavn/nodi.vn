@@ -2,7 +2,8 @@ use axum::Router;
 use tower_http::cors::CorsLayer;
 use axum::http::{HeaderValue, Method, header};
 use tower_http::trace::TraceLayer;
-use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer, key_extractor::SmartIpKeyExtractor};
+// Rate limiting removed — JWT auth provides sufficient protection
+// (tower_governor SmartIpKeyExtractor was misreading Cloudflare X-Forwarded-For)
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -15,6 +16,7 @@ mod error;
 mod routes;
 mod models;
 mod middleware;
+mod services;
 
 /// A sender that can push text frames to a connected WebSocket client.
 pub type WsSender = tokio::sync::mpsc::UnboundedSender<String>;
@@ -22,12 +24,16 @@ pub type WsSender = tokio::sync::mpsc::UnboundedSender<String>;
 /// Shared chat rooms: ticket_id → list of (sender_type, sender_name, ws_sender)
 pub type ChatRooms = Arc<RwLock<HashMap<i32, Vec<(String, String, WsSender)>>>>;
 
+/// Sync rooms: store_id → list of WebSocket senders for real-time sync
+pub type SyncRooms = Arc<RwLock<HashMap<i32, Vec<WsSender>>>>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::PgPool,
     pub config: Arc<config::Config>,
     pub start_time: Instant,
     pub chat_rooms: ChatRooms,
+    pub sync_rooms: SyncRooms,
 }
 
 /// Security headers middleware
@@ -58,11 +64,18 @@ async fn main() {
     // Seed admin user if ADMIN_PASSWORD is set
     db::seed_admin(&pool).await;
 
+    // Init payment orders table
+    routes::payment::init_table(&pool).await;
+
+    // Sync V2 migrations (idempotent)
+    db::sync_v2_init(&pool).await;
+
     let state = AppState {
         pool,
         config: Arc::new(config),
         start_time: Instant::now(),
         chat_rooms: Arc::new(RwLock::new(HashMap::new())),
+        sync_rooms: Arc::new(RwLock::new(HashMap::new())),
     };
 
     let allowed_origins = [
@@ -75,17 +88,14 @@ async fn main() {
     let cors = CorsLayer::new()
         .allow_origin(allowed_origins.to_vec())
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::OPTIONS])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT, header::ORIGIN])
+        .allow_headers([
+            header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT, header::ORIGIN,
+            header::HeaderName::from_static("x-device-id"),
+            header::HeaderName::from_static("x-batch-id"),
+            header::HeaderName::from_static("x-hwid"),
+        ])
         .allow_credentials(true);
 
-    // Rate limiting: 50 req/sec per real client IP with burst of 100
-    // SmartIpKeyExtractor reads X-Forwarded-For > X-Real-Ip > peer IP
-    let governor_conf = GovernorConfigBuilder::default()
-        .key_extractor(SmartIpKeyExtractor)
-        .per_second(50)
-        .burst_size(100)
-        .finish()
-        .unwrap();
 
     let app = Router::new()
         .merge(routes::health::router())
@@ -101,14 +111,17 @@ async fn main() {
         .merge(routes::market::router())
         .merge(routes::support::router())
         .merge(routes::ws_support::router())
+        .merge(routes::ws_sync::router())
         .merge(routes::store::router())
         .merge(routes::accounting::router())
         .merge(routes::einvoice::router())
+        .merge(routes::staff_invite::router())
+        .merge(routes::payment::router())
+        .merge(routes::sync_v2::router())
         .layer(axum::middleware::from_fn(security_headers))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .layer(axum::extract::DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB
-        .layer(GovernorLayer::new(governor_conf))
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));

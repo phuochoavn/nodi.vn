@@ -48,7 +48,7 @@
         </div>
         <div class="text-center reveal">
           <NuxtLink to="/tinh-nang" class="btn btn-outline border-slate-300 dark:border-slate-600 hover:border-primary">
-            Xem chi tiết 16+ tính năng
+            Xem chi tiết tất cả tính năng
             <ArrowRight :size="16" />
           </NuxtLink>
         </div>
@@ -109,7 +109,7 @@
 </template>
 
 <script setup>
-import { Zap, BarChart3, Bot, CloudUpload, ArrowRight, Download, WifiOff, Receipt } from 'lucide-vue-next'
+import { Zap, BarChart3, Bot, CloudUpload, ArrowRight, Download, WifiOff, Receipt, Store } from 'lucide-vue-next'
 
 useHead({
   title: 'Nodi POS — Phần mềm quản lý cửa hàng vật tư nông nghiệp',
@@ -120,21 +120,23 @@ useHead({
 })
 
 const usps = [
-  { iconComponent: Zap, title: 'Bán hàng dưới 5 giây', desc: 'Quét mã, VietQR Napas, ghi nợ ngay tại quầy' },
-  { iconComponent: WifiOff, title: '100% Offline', desc: 'Hoạt động hoàn toàn không cần internet, sync khi có mạng' },
-  { iconComponent: Bot, title: 'Trợ lý AI 46 lệnh', desc: 'Bán hàng bằng chat, chẩn đoán 315+ bệnh cây trồng' },
-  { iconComponent: Receipt, title: 'Dual-Mode thuế', desc: 'Tách riêng hóa đơn VAT vs bán lẻ, cảnh báo ngưỡng thuế' },
+  { iconComponent: Zap, title: 'Bán hàng dưới 5 giây', desc: 'Quét mã, thanh toán QR, ghi nợ ngay tại quầy' },
+  { iconComponent: WifiOff, title: '100% Offline', desc: 'Không cần internet, tự đồng bộ khi có mạng' },
+  { iconComponent: Bot, title: 'Trợ lý AI thông minh', desc: 'Bán hàng bằng chat, tư vấn bệnh cây trồng' },
+  { iconComponent: CloudUpload, title: 'Sao lưu đám mây', desc: 'Máy hư không mất dữ liệu, khôi phục nhanh' },
+  { iconComponent: Store, title: 'Quản lý đa cửa hàng', desc: '1 tài khoản quản lý nhiều chi nhánh, dữ liệu tách biệt' },
 ]
 
 const features = [
-  { icon: 'shopping-cart', title: 'Bán hàng POS', desc: 'Quét mã, VietQR, tiền mặt, chuyển khoản — dưới 5 giây' },
-  { icon: 'warehouse', title: 'Quản lý kho', desc: 'Lô hàng, FEFO, hạn sử dụng, catalog 5700+ SP' },
-  { icon: 'package', title: 'Nhập hàng & NCC', desc: 'Phiếu nhập, công nợ NCC, tự động cập nhật kho' },
-  { icon: 'wallet', title: 'Công nợ & Thu chi', desc: 'Ghi nợ, thu nợ, phân khúc KH, sổ thu chi' },
-  { icon: 'file-text', title: 'HĐĐT & Thuế', desc: 'Dual-Mode, VNPT S-Invoice, xuất XML eTax' },
-  { icon: 'bar-chart', title: 'Báo cáo', desc: 'Doanh thu, lợi nhuận, so sánh, biểu đồ trực quan' },
-  { icon: 'bot', title: 'Trợ lý AI', desc: '46 lệnh, 315+ bệnh, self-learning, 100% offline' },
-  { icon: 'users', title: 'Nhân viên & PIN', desc: '9 quyền, PIN 4 số, đổi ca, RBAC' },
+  { icon: 'shopping-cart', title: 'Bán hàng nhanh', desc: 'Quét mã, thanh toán QR, tiền mặt — dưới 5 giây' },
+  { icon: 'warehouse', title: 'Quản lý kho', desc: 'Tồn kho, lô hàng, hạn sử dụng tự động' },
+  { icon: 'package', title: 'Nhập hàng', desc: 'Phiếu nhập, quản lý NCC, cập nhật kho' },
+  { icon: 'wallet', title: 'Công nợ & Thu chi', desc: 'Ghi nợ, thu nợ, sổ thu chi rõ ràng' },
+  { icon: 'file-text', title: 'Hóa đơn & In ấn', desc: 'In hóa đơn bán hàng, phiếu nhập, phiếu nợ' },
+  { icon: 'bar-chart', title: 'Báo cáo', desc: 'Doanh thu, lợi nhuận, biểu đồ trực quan' },
+  { icon: 'bot', title: 'Trợ lý AI', desc: 'Chat bán hàng, tư vấn bệnh cây, tra cứu nhanh' },
+  { icon: 'users', title: 'Nhân viên', desc: 'Phân quyền rõ ràng, ai làm gì biết nấy' },
+  { icon: 'store', title: 'Đa cửa hàng', desc: '1 tài khoản quản lý nhiều chi nhánh' },
 ]
 
 const pricingPreview = [
@@ -162,7 +164,7 @@ const pricingPreview = [
       { text: 'Cập nhật phiên bản mới' },
       { text: 'Hỗ trợ kỹ thuật qua Zalo' },
     ],
-    cta: { text: 'Mua ngay', link: '/lien-he' },
+    cta: { text: 'Mua ngay', link: '/thanh-toan' },
   },
   {
     name: 'Theo năm', price: '1.990.000đ', period: '/năm', description: '≈ 166k/tháng — Tiết kiệm 44%', popular: true,
@@ -171,7 +173,7 @@ const pricingPreview = [
       { text: 'Tiết kiệm 44%' },
       { text: 'Ưu tiên hỗ trợ kỹ thuật' },
     ],
-    cta: { text: 'Mua ngay', link: '/lien-he' },
+    cta: { text: 'Mua ngay', link: '/thanh-toan' },
   },
 ]
 </script>

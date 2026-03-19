@@ -12,7 +12,7 @@
             <td>{{ b.store_name || 'Store #'+b.store_id }}</td>
             <td class="mono">{{ b.filename }}</td>
             <td>{{ (b.size_bytes/1024).toFixed(1) }} KB</td>
-            <td>{{ b.created_at?.slice(0,16) }}</td>
+            <td>{{ fmtDateTime(b.created_at) }}</td>
           </tr>
           <tr v-if="backups.length===0"><td colspan="4" class="empty">Chưa có backup</td></tr>
         </tbody>
@@ -25,6 +25,7 @@
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Backup — Admin' })
 const { fetchApi } = useAuth()
+const { fmtDateTime } = await import('~/utils/date')
 const backups = ref([])
 const totalSize = ref(0)
 const totalFiles = ref(0)

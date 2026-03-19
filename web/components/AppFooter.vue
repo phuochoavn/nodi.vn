@@ -8,7 +8,7 @@
         <!-- Brand -->
         <div class="sm:col-span-2 lg:col-span-1">
           <NuxtLink to="/" class="flex items-center gap-2 mb-4">
-            <img src="/logo.svg" alt="Nodi POS" class="h-7 brightness-0 invert" />
+            <NodiLogo :size="24" :show-text="true" :text-size="18" />
           </NuxtLink>
           <p class="text-slate-400 text-sm leading-relaxed max-w-[280px] mb-5">
             Phần mềm quản lý cửa hàng vật tư nông nghiệp thông minh, dễ sử dụng.

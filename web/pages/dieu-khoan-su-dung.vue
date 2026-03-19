@@ -8,7 +8,7 @@
       <h2>2. Giấy phép sử dụng</h2>
       <p>Chúng tôi cấp cho bạn giấy phép không độc quyền, không thể chuyển nhượng để sử dụng Phần mềm theo các điều kiện:</p>
       <ul>
-        <li>Mỗi License Key chỉ có giá trị cho <strong>1 thiết bị</strong> tại một thời điểm.</li>
+        <li>Mỗi License Key có giá trị cho tối đa <strong>10 thiết bị</strong> (PC + Mobile) tại một thời điểm.</li>
         <li>Bạn không được sao chép, phân phối, hoặc bán lại Phần mềm.</li>
         <li>Bạn không được dịch ngược, tháo rời, hoặc cố gắng lấy mã nguồn Phần mềm.</li>
         <li>License Key có thể là dạng dùng thử (Trial), hàng tháng (Monthly), hàng năm (Yearly), hoặc trọn đời (Lifetime).</li>

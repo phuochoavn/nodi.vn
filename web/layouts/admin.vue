@@ -10,9 +10,7 @@
       <!-- Logo -->
       <div class="flex items-center gap-2 px-4 py-5 border-b border-purple-900/50">
         <NuxtLink to="/admin" class="flex items-center gap-2 text-white font-extrabold text-lg overflow-hidden">
-          <div class="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center flex-shrink-0">
-            <Wrench :size="16" class="text-white" />
-          </div>
+          <NodiLogo :size="32" />
           <Transition enter-active-class="transition-opacity duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100"
                       leave-active-class="transition-opacity duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0">
             <span v-if="!collapsed" class="whitespace-nowrap">
@@ -102,7 +100,7 @@
 </template>
 
 <script setup>
-import { LayoutDashboard, Key, Store, TrendingUp, MessageSquare, HardDrive, Server, ArrowLeft, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Wrench, Sun, Moon } from 'lucide-vue-next'
+import { LayoutDashboard, Key, Store, TrendingUp, MessageSquare, HardDrive, Server, ArrowLeft, LogOut, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, Wrench, Sun, Moon, Upload, Users, ClipboardList, Bell } from 'lucide-vue-next'
 
 const { logout, fetchApi } = useAuth()
 const colorMode = useColorMode()
@@ -118,9 +116,13 @@ const navItems = computed(() => [
   { icon: LayoutDashboard, label: 'Tổng quan', to: '/admin' },
   { icon: Key, label: 'License', to: '/admin/license' },
   { icon: Store, label: 'Cửa hàng', to: '/admin/cua-hang' },
+  { icon: Users, label: 'Tài khoản', to: '/admin/tai-khoan' },
   { icon: TrendingUp, label: 'Thị trường', to: '/admin/thi-truong' },
   { icon: MessageSquare, label: 'Hỗ trợ', to: '/admin/support', badge: supportUnread.value },
+  { icon: Bell, label: 'Thông báo', to: '/admin/thong-bao' },
+  { icon: ClipboardList, label: 'Nhật ký', to: '/admin/nhat-ky' },
   { icon: HardDrive, label: 'Backup', to: '/admin/backup' },
+  { icon: Upload, label: 'Cập nhật', to: '/admin/cap-nhat' },
   { icon: Server, label: 'Hệ thống', to: '/admin/he-thong' },
 ])
 

@@ -1,9 +1,16 @@
 // Global toast notification system
-const toasts = ref([])
+interface Toast {
+    id: number
+    message: string
+    type: string
+    visible: boolean
+}
+
+const toasts = ref<Toast[]>([])
 let toastId = 0
 
 export const useToast = () => {
-    function addToast(message, type = 'info', duration = 4000) {
+    function addToast(message: string, type = 'info', duration = 4000) {
         const id = ++toastId
         toasts.value.push({ id, message, type, visible: true })
         if (duration > 0) {
@@ -16,7 +23,7 @@ export const useToast = () => {
         return id
     }
 
-    function removeToast(id) {
+    function removeToast(id: number) {
         const idx = toasts.value.findIndex(t => t.id === id)
         if (idx !== -1) {
             toasts.value[idx].visible = false
@@ -26,10 +33,10 @@ export const useToast = () => {
         }
     }
 
-    function success(message, duration) { return addToast(message, 'success', duration) }
-    function error(message, duration) { return addToast(message, 'error', duration || 6000) }
-    function warning(message, duration) { return addToast(message, 'warning', duration) }
-    function info(message, duration) { return addToast(message, 'info', duration) }
+    function success(message: string, duration?: number) { return addToast(message, 'success', duration) }
+    function error(message: string, duration?: number) { return addToast(message, 'error', duration || 6000) }
+    function warning(message: string, duration?: number) { return addToast(message, 'warning', duration) }
+    function info(message: string, duration?: number) { return addToast(message, 'info', duration) }
 
     return { toasts, addToast, removeToast, success, error, warning, info }
 }

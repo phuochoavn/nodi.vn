@@ -124,7 +124,7 @@ import {
   ShoppingCart, Package, Wallet, FileText, BarChart3, Bot, RefreshCw, 
   ClipboardList, FileSpreadsheet, Check, Download, Warehouse, DollarSign,
   Calculator, Users, Cloud, UserCheck, Shield, Printer, Settings, Smartphone,
-  QrCode, Lock
+  QrCode, Lock, Store
 } from 'lucide-vue-next'
 import { ref, onMounted, onUnmounted } from 'vue'
 
@@ -156,7 +156,7 @@ const sections = [
   },
   {
     id: 'kho-hang', iconComponent: Warehouse, title: 'Quản lý kho hàng',
-    desc: 'Quản lý tồn kho, lô hàng, hạn sử dụng với hệ thống FEFO tự động. Catalog 5700+ sản phẩm nông nghiệp có sẵn.',
+    desc: 'Quản lý tồn kho, lô hàng, hạn sử dụng với hệ thống FEFO tự động.',
     items: [
       'Danh sách sản phẩm — tồn kho, giá bán, giá vốn real-time',
       'Quản lý lô hàng (Batch) — theo dõi ngày sản xuất, ngày hết hạn',
@@ -165,7 +165,6 @@ const sections = [
       'Phát hiện hàng bán chậm — sản phẩm lâu không bán',
       'Kiểm kho (Stocktake) — nhập thực tế, tính chênh lệch tự động',
       'Xuất Excel tồn kho (.xlsx)',
-      'Catalog 5700+ sản phẩm nông nghiệp VN có sẵn (Thuốc BVTV, Phân bón, Giống)',
     ],
   },
   {
@@ -322,8 +321,20 @@ const sections = [
     desc: 'Bắt đầu dùng thử chỉ sau 5 phút với dữ liệu hàng hóa đẩy lên tự động.',
     items: [
       'Tự động map cột hệ thống với cột Excel tiếng Việt',
-      'Nhập nhanh kho danh mục lên đến 5700+ sản phẩm BVTV',
+      'Nhập nhanh kho danh mục sản phẩm từ file Excel',
       'Preview trực quan trước khi xác nhận lưu dữ liệu',
+    ],
+  },
+  {
+    id: 'da-cua-hang', iconComponent: Store, title: 'Quản lý đa cửa hàng',
+    desc: '1 tài khoản quản lý nhiều cửa hàng/chi nhánh. Dữ liệu tách biệt, chuyển đổi nhanh.',
+    items: [
+      'Tạo và quản lý nhiều cửa hàng/chi nhánh trên 1 tài khoản',
+      'Mỗi cửa hàng sử dụng 1 license key riêng',
+      'Mỗi cửa hàng hỗ trợ tối đa 10 thiết bị (PC + Mobile)',
+      'Chuyển đổi giữa các cửa hàng chỉ 1 click',
+      'Dữ liệu hoàn toàn tách biệt giữa các cửa hàng',
+      'Xem thống kê từng cửa hàng trên web dashboard',
     ],
   },
 ]

@@ -1,4 +1,4 @@
-use axum::{Router, Json, extract::{State, Path, Query}, routing::{get, post, put}};
+use axum::{Router, Json, extract::{State, Path, Query, Multipart}, routing::{get, post, put, delete}};
 use axum::http::HeaderMap;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -46,6 +46,29 @@ pub fn router() -> Router<AppState> {
         .route("/api/admin/intelligence/manufacturers", get(intel_manufacturers))
         .route("/api/admin/backups", get(all_backups))
         .route("/api/admin/system", get(system_health))
+        // Update management
+        .route("/api/admin/update", get(get_update_config).put(edit_update_config))
+        .route("/api/admin/update/upload", post(upload_installer))
+        .route("/api/admin/update/files/{filename}", delete(delete_installer_file))
+        // Phase 1: Account management
+        .route("/api/admin/accounts", get(accounts_list))
+        .route("/api/admin/accounts/{id}/toggle", put(account_toggle))
+        // Phase 2: Audit log
+        .route("/api/admin/audit-log", get(audit_log_list))
+        // Phase 3: Notifications
+        .route("/api/admin/notifications", get(notifications_list).post(create_notification))
+        .route("/api/admin/notifications/{id}", delete(delete_notification))
+        // Phase 4: Analytics
+        .route("/api/admin/license-revenue", get(license_revenue))
+        .route("/api/admin/geo", get(geo_analysis))
+        .route("/api/admin/stores-compare", get(stores_compare))
+        // Phase 5: Export
+        .route("/api/admin/export/{type}", get(export_csv))
+        // Phase 6: Multi-device license
+        .route("/api/admin/license/{id}/devices", get(admin_license_devices))
+        // Phase 7: Payment orders
+        .route("/api/admin/orders", get(admin_orders_list))
+        .route("/api/admin/orders/{id}/confirm", post(admin_confirm_order))
 }
 
 // ===== API 1: Admin Overview =====
@@ -237,7 +260,10 @@ async fn update_license(
         "reset_hwid" => {
             sqlx::query("UPDATE stores SET hwid = NULL, activated_at = NULL WHERE id = $1")
                 .bind(id).execute(&state.pool).await?;
-            Ok(Json(json!({ "success": true, "message": "HWID reset" })))
+            // Also deactivate all devices for this store
+            sqlx::query("UPDATE devices SET is_active = false WHERE store_id = $1")
+                .bind(id).execute(&state.pool).await?;
+            Ok(Json(json!({ "success": true, "message": "HWID reset & all devices deactivated" })))
         }
         _ => Err(AppError::BadRequest("Invalid action".into())),
     }
@@ -585,5 +611,794 @@ async fn system_health(
         "db_size_mb": db_size.map(|s| s.0 as f64 / 1024.0 / 1024.0).unwrap_or(0.0),
         "containers": 4,
         "api_version": "0.1.0"
+    })))
+}
+
+// ===== Update Management =====
+
+const DOWNLOADS_DIR: &str = "/opt/nodi/downloads";
+
+// GET /api/admin/update — return current config + file list
+async fn get_update_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let config = crate::routes::health::read_update_config();
+
+    // List files in downloads directory
+    let mut files: Vec<Value> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(DOWNLOADS_DIR) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            // Skip the config json file
+            if name == "update_config.json" || name == "test.txt" { continue; }
+            let meta = std::fs::metadata(&path).ok();
+            let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            let modified = meta.and_then(|m| m.modified().ok())
+                .map(|t| {
+                    let dt: chrono::DateTime<chrono::Utc> = t.into();
+                    dt.to_rfc3339()
+                })
+                .unwrap_or_default();
+            files.push(json!({
+                "name": name,
+                "size_bytes": size,
+                "size_mb": format!("{:.1}", size as f64 / 1024.0 / 1024.0),
+                "modified_at": modified,
+                "url": format!("https://nodi.vn/download/{}", name)
+            }));
+        }
+    }
+    // Sort by modified desc
+    files.sort_by(|a, b| {
+        let ma = a["modified_at"].as_str().unwrap_or("");
+        let mb = b["modified_at"].as_str().unwrap_or("");
+        mb.cmp(ma)
+    });
+
+    Ok(Json(json!({
+        "config": {
+            "latest_version": config.latest_version,
+            "download_url": config.download_url,
+            "release_notes": config.release_notes,
+            "file_size": config.file_size,
+            "updated_at": config.updated_at
+        },
+        "files": files
+    })))
+}
+
+// PUT /api/admin/update — edit config without uploading
+#[derive(Deserialize)]
+struct EditUpdateConfig {
+    latest_version: Option<String>,
+    download_url: Option<String>,
+    release_notes: Option<String>,
+    file_size: Option<String>,
+}
+
+async fn edit_update_config(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<EditUpdateConfig>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let mut config = crate::routes::health::read_update_config();
+    if let Some(v) = body.latest_version { config.latest_version = v; }
+    if let Some(u) = body.download_url { config.download_url = u; }
+    if let Some(n) = body.release_notes { config.release_notes = n; }
+    if let Some(s) = body.file_size { config.file_size = s; }
+    config.updated_at = chrono::Utc::now().to_rfc3339();
+
+    crate::routes::health::write_update_config(&config)
+        .map_err(|e| AppError::Internal(e))?;
+
+    tracing::info!("✅ Update config edited: version={}", config.latest_version);
+
+    Ok(Json(json!({
+        "success": true,
+        "config": {
+            "latest_version": config.latest_version,
+            "download_url": config.download_url,
+            "release_notes": config.release_notes,
+            "file_size": config.file_size,
+            "updated_at": config.updated_at
+        }
+    })))
+}
+
+// POST /api/admin/update/upload — upload installer file + update config
+async fn upload_installer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    mut multipart: Multipart,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let mut file_data: Option<Vec<u8>> = None;
+    let mut file_name: Option<String> = None;
+    let mut version: Option<String> = None;
+    let mut release_notes: Option<String> = None;
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        match name.as_str() {
+            "file" => {
+                file_name = field.file_name().map(|n| n.to_string());
+                file_data = Some(
+                    field.bytes().await
+                        .map_err(|e| AppError::Internal(format!("File read error: {}", e)))?
+                        .to_vec()
+                );
+            }
+            "version" => {
+                version = Some(field.text().await.unwrap_or_default());
+            }
+            "release_notes" => {
+                release_notes = Some(field.text().await.unwrap_or_default());
+            }
+            _ => {}
+        }
+    }
+
+    let file_data = file_data.ok_or(AppError::BadRequest("No file uploaded".into()))?;
+    let orig_name = file_name.unwrap_or_else(|| "installer.exe".into());
+
+    // Save file
+    tokio::fs::create_dir_all(DOWNLOADS_DIR).await
+        .map_err(|e| AppError::Internal(format!("Dir create error: {}", e)))?;
+
+    let filepath = format!("{}/{}", DOWNLOADS_DIR, orig_name);
+    let file_size = file_data.len();
+
+    tokio::fs::write(&filepath, &file_data).await
+        .map_err(|e| AppError::Internal(format!("File write error: {}", e)))?;
+
+    tracing::info!("✅ Installer uploaded: file={}, size={}", orig_name, file_size);
+
+    // Update config if version provided
+    let ver = version.unwrap_or_else(|| {
+        // Try to extract version from filename like NodiPOS_1.2.0_x64-setup.exe
+        orig_name.split('_').nth(1).unwrap_or("1.0.0").to_string()
+    });
+    let download_url = format!("https://nodi.vn/download/{}", orig_name);
+    let size_str = format!("{:.1} MB", file_size as f64 / 1024.0 / 1024.0);
+
+    let config = crate::routes::health::UpdateConfig {
+        latest_version: ver.clone(),
+        download_url: download_url.clone(),
+        release_notes: release_notes.unwrap_or_default(),
+        file_size: size_str.clone(),
+        updated_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    crate::routes::health::write_update_config(&config)
+        .map_err(|e| AppError::Internal(e))?;
+
+    Ok(Json(json!({
+        "success": true,
+        "filename": orig_name,
+        "size_bytes": file_size,
+        "size_mb": size_str,
+        "download_url": download_url,
+        "version": ver,
+        "config": {
+            "latest_version": config.latest_version,
+            "download_url": config.download_url,
+            "release_notes": config.release_notes,
+            "file_size": config.file_size,
+            "updated_at": config.updated_at
+        }
+    })))
+}
+
+// DELETE /api/admin/update/files/:filename — delete an installer file
+async fn delete_installer_file(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(filename): Path<String>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    // Security: prevent path traversal
+    if filename.contains('/') || filename.contains("..") {
+        return Err(AppError::BadRequest("Invalid filename".into()));
+    }
+
+    let filepath = format!("{}/{}", DOWNLOADS_DIR, filename);
+    if !std::path::Path::new(&filepath).exists() {
+        return Err(AppError::NotFound("File not found".into()));
+    }
+
+    tokio::fs::remove_file(&filepath).await
+        .map_err(|e| AppError::Internal(format!("Delete error: {}", e)))?;
+
+    tracing::info!("🗑️ Installer deleted: {}", filename);
+
+    Ok(Json(json!({
+        "success": true,
+        "message": format!("Deleted {}", filename)
+    })))
+}
+
+// ============================================================
+// Phase 1: Account Management
+// ============================================================
+
+#[derive(Deserialize)]
+struct AccountsQuery { status: Option<String> }
+
+async fn accounts_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<AccountsQuery>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let rows = sqlx::query_as::<_, (i32, String, Option<String>, Option<String>, String, bool, Option<chrono::NaiveDateTime>, Option<chrono::NaiveDateTime>, Option<String>)>(
+        "SELECT a.id, a.username, a.display_name, a.phone, a.store_id, a.is_active, a.created_at, a.updated_at, a.hwid FROM accounts a ORDER BY a.created_at DESC"
+    ).fetch_all(&state.pool).await?;
+
+    let mut accounts = Vec::new();
+    for r in &rows {
+        let active = r.5;
+        if let Some(ref s) = q.status {
+            if s == "active" && !active { continue; }
+            if s == "inactive" && active { continue; }
+        }
+        let stores_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM account_stores WHERE account_id = $1"
+        ).bind(r.0).fetch_one(&state.pool).await.unwrap_or((0,));
+
+        let store_names: Vec<(Option<String>,)> = sqlx::query_as(
+            "SELECT store_name FROM account_stores WHERE account_id = $1 ORDER BY is_default DESC"
+        ).bind(r.0).fetch_all(&state.pool).await.unwrap_or_default();
+
+        let names: Vec<&str> = store_names.iter()
+            .filter_map(|s| s.0.as_deref())
+            .collect();
+
+        accounts.push(json!({
+            "id": r.0, "username": r.1, "display_name": r.2,
+            "phone": r.3, "store_id": r.4, "is_active": active,
+            "created_at": r.6.map(|d| d.to_string()),
+            "updated_at": r.7.map(|d| d.to_string()),
+            "hwid": r.8,
+            "stores_count": stores_count.0,
+            "store_names": names,
+        }));
+    }
+
+    let total = accounts.len();
+    let active = accounts.iter().filter(|a| a["is_active"].as_bool().unwrap_or(false)).count();
+
+    Ok(Json(json!({
+        "accounts": accounts,
+        "total": total,
+        "active": active,
+        "inactive": total - active,
+    })))
+}
+
+async fn account_toggle(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i32>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let current: Option<(bool,)> = sqlx::query_as(
+        "SELECT is_active FROM accounts WHERE id = $1"
+    ).bind(id).fetch_optional(&state.pool).await?;
+
+    let is_active = match current {
+        Some((a,)) => a,
+        None => return Err(AppError::NotFound("Account not found".into())),
+    };
+
+    let new_status = !is_active;
+    sqlx::query("UPDATE accounts SET is_active = $1, updated_at = NOW() WHERE id = $2")
+        .bind(new_status).bind(id).execute(&state.pool).await?;
+
+    // Log audit
+    log_audit(&state.pool, "ACCOUNT_TOGGLE", "admin",
+        Some("account"), Some(&id.to_string()),
+        Some(&format!("is_active: {} → {}", is_active, new_status))
+    ).await;
+
+    Ok(Json(json!({
+        "success": true,
+        "is_active": new_status,
+        "message": if new_status { "Đã kích hoạt tài khoản" } else { "Đã vô hiệu hóa tài khoản" }
+    })))
+}
+
+// ============================================================
+// Phase 2: Audit Log
+// ============================================================
+
+pub async fn log_audit(pool: &sqlx::PgPool, action: &str, actor: &str, target_type: Option<&str>, target_id: Option<&str>, details: Option<&str>) {
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (action, actor, target_type, target_id, details) VALUES ($1, $2, $3, $4, $5)"
+    ).bind(action).bind(actor).bind(target_type).bind(target_id).bind(details)
+    .execute(pool).await;
+}
+
+#[derive(Deserialize)]
+struct AuditQuery { action: Option<String>, limit: Option<i64>, offset: Option<i64> }
+
+async fn audit_log_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<AuditQuery>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+    let limit = q.limit.unwrap_or(100).min(500);
+    let offset = q.offset.unwrap_or(0);
+
+    let (rows, total) = if let Some(ref action) = q.action {
+        let r = sqlx::query_as::<_, (i32, String, String, Option<String>, Option<String>, Option<String>, Option<chrono::NaiveDateTime>)>(
+            "SELECT id, action, actor, target_type, target_id, details, created_at FROM audit_log WHERE action = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+        ).bind(action).bind(limit).bind(offset).fetch_all(&state.pool).await?;
+        let t: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_log WHERE action = $1").bind(action).fetch_one(&state.pool).await.unwrap_or((0,));
+        (r, t.0)
+    } else {
+        let r = sqlx::query_as::<_, (i32, String, String, Option<String>, Option<String>, Option<String>, Option<chrono::NaiveDateTime>)>(
+            "SELECT id, action, actor, target_type, target_id, details, created_at FROM audit_log ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await?;
+        let t: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_log").fetch_one(&state.pool).await.unwrap_or((0,));
+        (r, t.0)
+    };
+
+    let logs: Vec<Value> = rows.iter().map(|r| json!({
+        "id": r.0, "action": r.1, "actor": r.2,
+        "target_type": r.3, "target_id": r.4,
+        "details": r.5, "created_at": r.6.map(|d| d.to_string())
+    })).collect();
+
+    Ok(Json(json!({ "logs": logs, "total": total })))
+}
+
+// ============================================================
+// Phase 3: Notifications
+// ============================================================
+
+#[derive(Deserialize)]
+struct CreateNotification { title: String, message: String, #[serde(default)] target_type: String, #[serde(default)] target_id: Option<String> }
+
+async fn notifications_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let rows = sqlx::query_as::<_, (i32, String, String, Option<String>, Option<String>, Option<chrono::NaiveDateTime>)>(
+        "SELECT id, title, message, target_type, target_id, created_at FROM notifications ORDER BY created_at DESC LIMIT 200"
+    ).fetch_all(&state.pool).await?;
+
+    let notifications: Vec<Value> = rows.iter().map(|r| json!({
+        "id": r.0, "title": r.1, "message": r.2,
+        "target_type": r.3, "target_id": r.4,
+        "created_at": r.5.map(|d| d.to_string())
+    })).collect();
+
+    Ok(Json(json!({ "notifications": notifications, "total": rows.len() })))
+}
+
+async fn create_notification(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<CreateNotification>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let target = if body.target_type.is_empty() { "all" } else { &body.target_type };
+
+    let id: (i32,) = sqlx::query_as(
+        "INSERT INTO notifications (title, message, target_type, target_id) VALUES ($1, $2, $3, $4) RETURNING id"
+    ).bind(&body.title).bind(&body.message).bind(target).bind(&body.target_id)
+    .fetch_one(&state.pool).await?;
+
+    log_audit(&state.pool, "NOTIFICATION_CREATED", "admin",
+        Some("notification"), Some(&id.0.to_string()),
+        Some(&format!("title: {}, target: {}", body.title, target))
+    ).await;
+
+    Ok(Json(json!({ "success": true, "id": id.0 })))
+}
+
+async fn delete_notification(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i32>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+    sqlx::query("DELETE FROM notifications WHERE id = $1").bind(id).execute(&state.pool).await?;
+    Ok(Json(json!({ "success": true })))
+}
+
+// ============================================================
+// Phase 4: Enhanced Analytics
+// ============================================================
+
+async fn license_revenue(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    // Total collected
+    let total: (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(amount), 0) FROM license_payments"
+    ).fetch_one(&state.pool).await.unwrap_or((0,));
+
+    // Monthly revenue trend
+    let monthly = sqlx::query_as::<_, (String, i64, i64)>(
+        "SELECT TO_CHAR(created_at, 'YYYY-MM'), COALESCE(SUM(amount), 0), COUNT(*) \
+         FROM license_payments WHERE created_at >= NOW() - INTERVAL '12 months' \
+         GROUP BY 1 ORDER BY 1"
+    ).fetch_all(&state.pool).await.unwrap_or_default();
+
+    let trend: Vec<Value> = monthly.iter().map(|r| json!({
+        "month": r.0, "revenue": r.1, "payments": r.2
+    })).collect();
+
+    // MRR (last 30 days)
+    let mrr: (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(amount), 0) FROM license_payments WHERE created_at >= NOW() - INTERVAL '30 days'"
+    ).fetch_one(&state.pool).await.unwrap_or((0,));
+
+    // License type breakdown
+    let types = sqlx::query_as::<_, (Option<String>, i64)>(
+        "SELECT license_type, COUNT(*) FROM stores WHERE license_type IS NOT NULL GROUP BY license_type ORDER BY 2 DESC"
+    ).fetch_all(&state.pool).await.unwrap_or_default();
+
+    let license_types: Vec<Value> = types.iter().map(|r| json!({
+        "type": r.0.as_deref().unwrap_or("unknown"), "count": r.1
+    })).collect();
+
+    // New stores per month
+    let new_stores = sqlx::query_as::<_, (String, i64)>(
+        "SELECT TO_CHAR(created_at, 'YYYY-MM'), COUNT(*) FROM stores \
+         WHERE created_at >= NOW() - INTERVAL '12 months' \
+         GROUP BY 1 ORDER BY 1"
+    ).fetch_all(&state.pool).await.unwrap_or_default();
+
+    let growth: Vec<Value> = new_stores.iter().map(|r| json!({
+        "month": r.0, "new_stores": r.1
+    })).collect();
+
+    Ok(Json(json!({
+        "total_collected": total.0,
+        "mrr": mrr.0,
+        "revenue_by_month": trend,
+        "license_types": license_types,
+        "store_growth": growth,
+    })))
+}
+
+async fn geo_analysis(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    // Stores by province
+    let provinces = sqlx::query_as::<_, (Option<String>, i64, i64)>(
+        "SELECT s.province, COUNT(*), COALESCE(SUM(sub.rev), 0) FROM stores s \
+         LEFT JOIN (SELECT store_id, SUM(final_amount::bigint) as rev FROM synced_invoices GROUP BY store_id) sub ON sub.store_id = s.id \
+         WHERE s.province IS NOT NULL AND s.province != '' \
+         GROUP BY s.province ORDER BY 2 DESC"
+    ).fetch_all(&state.pool).await.unwrap_or_default();
+
+    let by_province: Vec<Value> = provinces.iter().map(|r| json!({
+        "province": r.0, "stores": r.1, "revenue": r.2
+    })).collect();
+
+    // Stores without province
+    let no_province: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM stores WHERE province IS NULL OR province = ''"
+    ).fetch_one(&state.pool).await.unwrap_or((0,));
+
+    Ok(Json(json!({
+        "by_province": by_province,
+        "no_province_count": no_province.0,
+    })))
+}
+
+async fn stores_compare(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let rows = sqlx::query_as::<_, (i32, Option<String>, Option<String>, Option<bool>)>(
+        "SELECT id, owner_name, license_type, is_active FROM stores WHERE is_active = true ORDER BY id"
+    ).fetch_all(&state.pool).await?;
+
+    let mut stores = Vec::new();
+    for r in &rows {
+        let sid = r.0;
+        let rev: (i64,) = sqlx::query_as("SELECT COALESCE(SUM(final_amount::bigint), 0) FROM synced_invoices WHERE store_id = $1").bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
+        let orders: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM synced_invoices WHERE store_id = $1").bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
+        let products: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM synced_products WHERE store_id = $1").bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
+        let customers: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM synced_customers WHERE store_id = $1").bind(sid).fetch_one(&state.pool).await.unwrap_or((0,));
+        let last_sync: Option<(Option<chrono::NaiveDateTime>,)> = sqlx::query_as(
+            "SELECT MAX(created_at) FROM synced_invoices WHERE store_id = $1"
+        ).bind(sid).fetch_optional(&state.pool).await.unwrap_or(None);
+        let avg_order = if orders.0 > 0 { rev.0 / orders.0 } else { 0 };
+
+        stores.push(json!({
+            "id": sid, "name": r.1, "license_type": r.2,
+            "revenue": rev.0, "orders": orders.0,
+            "products": products.0, "customers": customers.0,
+            "avg_order_value": avg_order,
+            "last_activity": last_sync.and_then(|s| s.0.map(|d| d.to_string())),
+        }));
+    }
+
+    // Sort by revenue descending
+    stores.sort_by(|a, b| b["revenue"].as_i64().cmp(&a["revenue"].as_i64()));
+
+    Ok(Json(json!({ "stores": stores })))
+}
+
+// ============================================================
+// Phase 5: CSV Export
+// ============================================================
+
+async fn export_csv(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(export_type): Path<String>,
+) -> Result<axum::response::Response, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let csv_content = match export_type.as_str() {
+        "stores" => {
+            let rows = sqlx::query_as::<_, (i32, Option<String>, Option<String>, Option<String>, Option<bool>, Option<String>, Option<chrono::NaiveDateTime>)>(
+                "SELECT id, owner_name, phone, license_type, is_active, province, created_at FROM stores ORDER BY id"
+            ).fetch_all(&state.pool).await?;
+            let mut csv = "ID,Tên,SĐT,Gói,Hoạt động,Tỉnh/TP,Ngày tạo\n".to_string();
+            for r in &rows {
+                csv += &format!("{},{},{},{},{},{},{}\n",
+                    r.0, r.1.as_deref().unwrap_or(""), r.2.as_deref().unwrap_or(""),
+                    r.3.as_deref().unwrap_or("free"), r.4.unwrap_or(false),
+                    r.5.as_deref().unwrap_or(""), r.6.map(|d| d.to_string()).unwrap_or_default()
+                );
+            }
+            csv
+        },
+        "accounts" => {
+            let rows = sqlx::query_as::<_, (i32, String, Option<String>, Option<String>, bool, Option<chrono::NaiveDateTime>)>(
+                "SELECT id, username, display_name, phone, is_active, created_at FROM accounts ORDER BY id"
+            ).fetch_all(&state.pool).await?;
+            let mut csv = "ID,Username,Tên,SĐT,Hoạt động,Ngày tạo\n".to_string();
+            for r in &rows {
+                csv += &format!("{},{},{},{},{},{}\n",
+                    r.0, r.1, r.2.as_deref().unwrap_or(""), r.3.as_deref().unwrap_or(""),
+                    r.4, r.5.map(|d| d.to_string()).unwrap_or_default()
+                );
+            }
+            csv
+        },
+        "products" => {
+            let rows = sqlx::query_as::<_, (i32, i32, Option<String>, Option<String>, Option<f64>, Option<f64>, Option<f64>)>(
+                "SELECT store_id, local_id, name, sku, sell_price, cost_price, stock FROM synced_products ORDER BY store_id, local_id LIMIT 10000"
+            ).fetch_all(&state.pool).await?;
+            let mut csv = "Store ID,Product ID,Tên SP,SKU,Giá bán,Giá vốn,Tồn kho\n".to_string();
+            for r in &rows {
+                csv += &format!("{},{},{},{},{},{},{}\n",
+                    r.0, r.1, r.2.as_deref().unwrap_or(""), r.3.as_deref().unwrap_or(""),
+                    r.4.unwrap_or(0.0), r.5.unwrap_or(0.0), r.6.unwrap_or(0.0)
+                );
+            }
+            csv
+        },
+        "orders" => {
+            let rows = sqlx::query_as::<_, (i32, i32, Option<f64>, Option<f64>, Option<String>, Option<chrono::NaiveDateTime>)>(
+                "SELECT store_id, local_id, total_amount, final_amount, customer_name, created_at FROM synced_invoices ORDER BY created_at DESC LIMIT 10000"
+            ).fetch_all(&state.pool).await?;
+            let mut csv = "Store ID,Order ID,Tổng tiền,Thành tiền,Khách hàng,Ngày\n".to_string();
+            for r in &rows {
+                csv += &format!("{},{},{},{},{},{}\n",
+                    r.0, r.1, r.2.unwrap_or(0.0), r.3.unwrap_or(0.0),
+                    r.4.as_deref().unwrap_or(""),
+                    r.5.map(|d| d.to_string()).unwrap_or_default()
+                );
+            }
+            csv
+        },
+        _ => return Err(AppError::BadRequest("Invalid export type. Use: stores, accounts, products, orders".into())),
+    };
+
+    log_audit(&state.pool, "EXPORT_CSV", "admin", Some("export"), Some(&export_type), None).await;
+
+    let filename = format!("nodi_{}.csv", export_type);
+    Ok(axum::response::Response::builder()
+        .header("Content-Type", "text/csv; charset=utf-8")
+        .header("Content-Disposition", format!("attachment; filename=\"{}\"", filename))
+        .body(axum::body::Body::from(csv_content))
+        .unwrap())
+}
+
+// ============================================================
+// GET /api/admin/license/:id/devices — Admin: view devices per store
+// ============================================================
+async fn admin_license_devices(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i32>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let rows = sqlx::query_as::<_, (i32, String, String, Option<String>, bool, Option<chrono::NaiveDateTime>, Option<chrono::NaiveDateTime>)>(
+        "SELECT id, device_id, device_type, device_name, is_active, first_activated_at, last_active_at \
+         FROM devices WHERE store_id = $1 ORDER BY is_active DESC, last_active_at DESC"
+    )
+    .bind(id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let devices: Vec<Value> = rows.iter().map(|r| json!({
+        "id": r.0,
+        "device_id": r.1,
+        "device_type": r.2,
+        "device_name": r.3,
+        "is_active": r.4,
+        "first_activated_at": r.5.map(|t| t.and_utc().to_rfc3339()),
+        "last_active_at": r.6.map(|t| t.and_utc().to_rfc3339())
+    })).collect();
+
+    let active_count = rows.iter().filter(|r| r.4).count();
+
+    Ok(Json(json!({
+        "store_id": id,
+        "devices": devices,
+        "active_count": active_count,
+        "total_count": devices.len(),
+        "max_devices": 10
+    })))
+}
+
+// ===== Phase 7: Payment Orders Management =====
+
+#[derive(Deserialize)]
+struct OrdersQuery { status: Option<String>, page: Option<i64>, limit: Option<i64> }
+
+async fn admin_orders_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<OrdersQuery>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    let page = q.page.unwrap_or(1).max(1);
+    let limit = q.limit.unwrap_or(50).min(200);
+    let offset = (page - 1) * limit;
+
+    let (rows, total) = if let Some(ref status) = q.status {
+        let r = sqlx::query_as::<_, (i32, String, String, i32, Option<String>, String, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, order_code, plan, amount, customer_name, customer_phone, customer_email, status, license_key, paid_at, expired_at, created_at \
+             FROM orders WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+        ).bind(status).bind(limit).bind(offset).fetch_all(&state.pool).await?;
+        let t: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM orders WHERE status = $1")
+            .bind(status).fetch_one(&state.pool).await.unwrap_or((0,));
+        (r, t.0)
+    } else {
+        let r = sqlx::query_as::<_, (i32, String, String, i32, Option<String>, String, Option<String>, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, chrono::DateTime<chrono::Utc>)>(
+            "SELECT id, order_code, plan, amount, customer_name, customer_phone, customer_email, status, license_key, paid_at, expired_at, created_at \
+             FROM orders ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+        ).bind(limit).bind(offset).fetch_all(&state.pool).await?;
+        let t: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM orders")
+            .fetch_one(&state.pool).await.unwrap_or((0,));
+        (r, t.0)
+    };
+
+    let orders: Vec<Value> = rows.iter().map(|r| {
+        let now = chrono::Utc::now();
+        let display_status = if r.7 == "PENDING" {
+            if let Some(exp) = r.10 { if now > exp { "EXPIRED" } else { "PENDING" } } else { "PENDING" }
+        } else { &r.7 };
+
+        json!({
+            "id": r.0, "order_code": r.1, "plan": r.2, "amount": r.3,
+            "customer_name": r.4, "customer_phone": r.5, "customer_email": r.6,
+            "status": display_status, "license_key": r.8,
+            "paid_at": r.9.map(|d| d.to_rfc3339()),
+            "expired_at": r.10.map(|d| d.to_rfc3339()),
+            "created_at": r.11.to_rfc3339()
+        })
+    }).collect();
+
+    // Summary counts
+    let counts = sqlx::query_as::<_, (i64, i64, i64)>(
+        "SELECT COUNT(*) FILTER (WHERE status = 'PENDING'), \
+         COUNT(*) FILTER (WHERE status = 'PAID'), \
+         COUNT(*) FILTER (WHERE status = 'EXPIRED' OR (status = 'PENDING' AND expired_at < NOW())) \
+         FROM orders"
+    ).fetch_one(&state.pool).await.unwrap_or((0,0,0));
+
+    Ok(Json(json!({
+        "orders": orders,
+        "total": total,
+        "pending": counts.0,
+        "paid": counts.1,
+        "expired": counts.2
+    })))
+}
+
+async fn admin_confirm_order(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i32>,
+) -> Result<Json<Value>, AppError> {
+    extract_admin(&headers, &state.config.jwt_secret)?;
+
+    // Find the order
+    let order = sqlx::query_as::<_, (String, String, i32, String, String)>(
+        "SELECT order_code, plan, amount, status, customer_phone FROM orders WHERE id = $1"
+    ).bind(id).fetch_optional(&state.pool).await?;
+
+    let (order_code, plan, _amount, status, phone) = match order {
+        Some(o) => o,
+        None => return Err(AppError::NotFound("Order not found".into())),
+    };
+
+    if status != "PENDING" {
+        return Err(AppError::BadRequest(format!("Order is already {}", status)));
+    }
+
+    // Generate license key
+    let mut key = generate_license_key();
+    for _ in 0..10 {
+        let exists: (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM stores WHERE license_key = $1)")
+            .bind(&key).fetch_one(&state.pool).await.unwrap_or((false,));
+        if !exists.0 { break; }
+        key = generate_license_key();
+    }
+
+    // Duration: plan + 30 days trial
+    let days = match plan.as_str() {
+        "YEARLY" => 365 + 30,
+        _ => 30 + 30,
+    };
+
+    let store_name = format!("Store-{}", &phone[phone.len().saturating_sub(4)..]);
+    let license_type = if plan == "YEARLY" { "YEARLY" } else { "MONTHLY" };
+
+    // Create store/license
+    sqlx::query(
+        "INSERT INTO stores (name, license_key, license_type, is_active, owner_name, license_expires_at, created_at, duration_days) \
+         VALUES ($1, $2, $3, true, $1, NOW() + ($4 || ' days')::interval, NOW(), $4)"
+    )
+    .bind(&store_name)
+    .bind(&key)
+    .bind(license_type)
+    .bind(days.to_string())
+    .execute(&state.pool).await?;
+
+    // Update order
+    sqlx::query("UPDATE orders SET status = 'PAID', license_key = $1, paid_at = NOW() WHERE id = $2")
+        .bind(&key)
+        .bind(id)
+        .execute(&state.pool).await?;
+
+    // Log audit
+    log_audit(&state.pool, "ORDER_CONFIRMED", "admin", Some("order"), Some(&order_code), Some(&format!("license_key={}", key))).await;
+
+    tracing::info!("✅ Admin confirmed order {} — License {} created", order_code, key);
+
+    Ok(Json(json!({
+        "success": true,
+        "order_code": order_code,
+        "license_key": key,
+        "license_type": license_type,
+        "duration_days": days,
+        "customer_phone": phone
     })))
 }

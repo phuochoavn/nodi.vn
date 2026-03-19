@@ -86,6 +86,7 @@ async fn migrate_hwid_data(pool: &PgPool, hwid: &str, data_store_id: i32) {
             "synced_purchase_items", "synced_purchase_orders",
             "synced_cash_transactions", "synced_payment_vouchers",
             "synced_store_funds", "synced_store_settings",
+            "synced_loyalty_transactions", "synced_loyalty_settings",
         ];
 
         for table in &tables {

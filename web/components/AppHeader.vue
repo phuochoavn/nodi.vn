@@ -8,8 +8,7 @@
     <div class="container flex items-center justify-between">
       <!-- Logo -->
       <NuxtLink to="/" class="flex items-center gap-2 group">
-        <img src="/logo.svg" alt="Nodi POS" class="h-8 transition-all"
-             :class="isHeroPage && !isScrolled ? 'brightness-0 invert' : 'dark:brightness-0 dark:invert'" />
+        <NodiLogo :size="28" :show-text="true" :text-size="20" />
       </NuxtLink>
 
       <!-- Desktop Nav -->
@@ -123,6 +122,7 @@ const navLinks = [
   { label: 'Tính năng', to: '/tinh-nang' },
   { label: 'Bảng giá', to: '/bang-gia' },
   { label: 'Tải app', to: '/tai-ung-dung' },
+  { label: 'Hướng dẫn', to: '/huong-dan' },
   { label: 'Liên hệ', to: '/lien-he' },
 ]
 

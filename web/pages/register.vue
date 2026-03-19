@@ -3,8 +3,7 @@
     <div class="login-bg"></div>
     <div class="login-card">
       <div class="login-logo">
-        <span>🌾</span>
-        <h1>Nodi<span class="accent">POS</span></h1>
+        <NodiLogo :size="56" :show-text="true" :text-size="28" :gap="10" />
       </div>
       <p class="login-subtitle">Đăng ký tài khoản miễn phí</p>
 

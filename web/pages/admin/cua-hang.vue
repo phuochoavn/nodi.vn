@@ -26,8 +26,8 @@
           <div>📞 {{ detail.store?.phone || '—' }}</div>
           <div>📍 {{ detail.store?.address || '—' }}</div>
           <div>🔑 {{ detail.license?.key }} — <span class="badge" :class="detail.license?.status">{{ detail.license?.status }}</span></div>
-          <div v-if="detail.license?.expires_at">📅 Hết hạn: {{ detail.license.expires_at?.slice(0,10) }}</div>
-          <div>🔄 Sync: {{ detail.sync?.last_synced_at?.slice(0,16) || 'Chưa bao giờ' }} ({{ detail.sync?.total_syncs }} lần)</div>
+          <div v-if="detail.license?.expires_at">📅 Hết hạn: {{ fmtDateOnly(detail.license.expires_at) }}</div>
+          <div>🔄 Sync: {{ fmtDateTime(detail.sync?.last_synced_at) }} ({{ detail.sync?.total_syncs }} lần)</div>
         </div>
         <div class="stats-grid">
           <div class="stat-card blue"><div class="stat-icon">📦</div><div class="stat-info"><span class="stat-value">{{ fmt(detail.stats?.total_products) }}</span><span class="stat-label">Sản phẩm</span></div></div>
@@ -46,6 +46,7 @@
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Cửa hàng — Admin' })
 const { fetchApi } = useAuth()
+const { fmtDateOnly, fmtDateTime } = await import('~/utils/date')
 const stores = ref([])
 const detail = ref(null)
 

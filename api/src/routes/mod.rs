@@ -14,3 +14,7 @@ pub mod ws_support;
 pub mod store;
 pub mod accounting;
 pub mod einvoice;
+pub mod staff_invite;
+pub mod payment;
+pub mod ws_sync;
+pub mod sync_v2;
