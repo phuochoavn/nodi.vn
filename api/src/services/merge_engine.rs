@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::collections::HashMap;
 
+use crate::models::sync_models::serde_transform_for_pull;
 use crate::models::sync_v2::{
     ChangeRecord, ConflictInfo, MergeRule, PullChangeRecord, get_table_meta,
 };
@@ -101,10 +102,10 @@ pub async fn process_push(
                 "INSERT" => {
                     match meta.merge_rule {
                         MergeRule::UuidDedup => {
-                            merge_insert_dedup(&mut tx, store_id, meta.pg_table, device_id, record).await
+                            merge_insert_dedup(&mut tx, store_id, meta.pg_table, table_name, device_id, record).await
                         }
                         MergeRule::Lww => {
-                            merge_insert_lww(&mut tx, store_id, meta.pg_table, device_id, record).await
+                            merge_insert_lww(&mut tx, store_id, meta.pg_table, table_name, device_id, record).await
                         }
                     }
                 }
@@ -261,6 +262,97 @@ enum MergeOutcome {
 }
 
 // ============================================================
+// Column Mapping — DEPRECATED (Sprint 140)
+// Replaced by Serde structs in models/sync_models.rs for pull.
+// Kept as fallback for push flow and any unrecognized tables.
+// ============================================================
+
+struct ColumnMap {
+    desktop: &'static str,
+    vps: &'static str,
+}
+
+/// All column mappings between Desktop (SQLite) and VPS (PostgreSQL).
+/// "ALL" entries apply globally; table-specific entries override.
+const COLUMN_MAPPINGS: &[(&str, &[ColumnMap])] = &[
+    ("ALL", &[
+        ColumnMap { desktop: "current_debt", vps: "total_debt" },
+    ]),
+    ("invoices", &[
+        ColumnMap { desktop: "note", vps: "notes" },
+        ColumnMap { desktop: "customer_id", vps: "customer_local_id" },
+    ]),
+    ("invoice_items", &[
+        ColumnMap { desktop: "subtotal", vps: "total" },
+        ColumnMap { desktop: "invoice_id", vps: "invoice_local_id" },
+        ColumnMap { desktop: "product_id", vps: "product_local_id" },
+    ]),
+    ("invoice_payments", &[
+        ColumnMap { desktop: "invoice_id", vps: "invoice_local_id" },
+    ]),
+    ("purchase_items", &[
+        ColumnMap { desktop: "purchase_order_id", vps: "purchase_order_local_id" },
+        ColumnMap { desktop: "product_id", vps: "product_local_id" },
+    ]),
+    ("product_units", &[
+        ColumnMap { desktop: "product_id", vps: "product_local_id" },
+    ]),
+    ("product_batches", &[
+        ColumnMap { desktop: "product_id", vps: "product_local_id" },
+    ]),
+    ("customer_transactions", &[
+        ColumnMap { desktop: "customer_id", vps: "customer_local_id" },
+    ]),
+    ("supplier_transactions", &[
+        ColumnMap { desktop: "supplier_id", vps: "supplier_local_id" },
+    ]),
+    ("product_transactions", &[
+        ColumnMap { desktop: "product_id", vps: "product_local_id" },
+    ]),
+    ("return_items", &[
+        ColumnMap { desktop: "return_id", vps: "return_local_id" },
+        ColumnMap { desktop: "product_id", vps: "product_local_id" },
+    ]),
+    ("suppliers", &[
+        ColumnMap { desktop: "name", vps: "company" },
+    ]),
+];
+
+/// Push: map desktop column name → VPS column name
+fn map_column_push(table: &str, desktop_key: &str) -> String {
+    // Check table-specific first
+    if let Some((_, maps)) = COLUMN_MAPPINGS.iter().find(|(t, _)| *t == table) {
+        if let Some(m) = maps.iter().find(|m| m.desktop == desktop_key) {
+            return m.vps.to_string();
+        }
+    }
+    // Check global
+    if let Some((_, maps)) = COLUMN_MAPPINGS.iter().find(|(t, _)| *t == "ALL") {
+        if let Some(m) = maps.iter().find(|m| m.desktop == desktop_key) {
+            return m.vps.to_string();
+        }
+    }
+    desktop_key.to_string()
+}
+
+/// Pull: map VPS column name → desktop column name
+fn map_column_pull(table: &str, vps_key: &str) -> String {
+    // Check table-specific first
+    if let Some((_, maps)) = COLUMN_MAPPINGS.iter().find(|(t, _)| *t == table) {
+        if let Some(m) = maps.iter().find(|m| m.vps == vps_key) {
+            return m.desktop.to_string();
+        }
+    }
+    // Check global
+    if let Some((_, maps)) = COLUMN_MAPPINGS.iter().find(|(t, _)| *t == "ALL") {
+        if let Some(m) = maps.iter().find(|m| m.vps == vps_key) {
+            return m.desktop.to_string();
+        }
+    }
+    vps_key.to_string()
+}
+
+// ============================================================
 // UUID Dedup — Append-only tables
 // ============================================================
 
@@ -268,6 +360,7 @@ async fn merge_insert_dedup(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     store_id: i32,
     pg_table: &str,
+    table_name: &str,
     device_id: &str,
     record: &ChangeRecord,
 ) -> Result<MergeOutcome, crate::error::AppError> {
@@ -287,7 +380,7 @@ async fn merge_insert_dedup(
     }
 
     // Build dynamic INSERT from data payload
-    insert_record_from_json(tx, store_id, pg_table, device_id, record).await?;
+    insert_record_from_json(tx, store_id, pg_table, table_name, device_id, record).await?;
     Ok(MergeOutcome::Applied)
 }
 
@@ -299,6 +392,7 @@ async fn merge_insert_lww(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     store_id: i32,
     pg_table: &str,
+    table_name: &str,
     device_id: &str,
     record: &ChangeRecord,
 ) -> Result<MergeOutcome, crate::error::AppError> {
@@ -315,11 +409,11 @@ async fn merge_insert_lww(
 
     if count.unwrap_or(0) > 0 {
         // Exists — treat as UPDATE (LWW path)
-        return merge_update_record(tx, store_id, pg_table, device_id, record).await;
+        return merge_update_record(tx, store_id, pg_table, table_name, device_id, record).await;
     }
 
     // New record — INSERT
-    insert_record_from_json(tx, store_id, pg_table, device_id, record).await?;
+    insert_record_from_json(tx, store_id, pg_table, table_name, device_id, record).await?;
     Ok(MergeOutcome::Applied)
 }
 
@@ -350,7 +444,7 @@ async fn merge_update_lww(
     match server_updated {
         None => {
             // Record doesn't exist — INSERT it
-            insert_record_from_json(tx, store_id, pg_table, device_id, record).await?;
+            insert_record_from_json(tx, store_id, pg_table, table_name, device_id, record).await?;
             Ok(MergeOutcome::Applied)
         }
         Some(server_ts) => {
@@ -361,7 +455,7 @@ async fn merge_update_lww(
 
             if client_ts > server_ts_str {
                 // Client wins — update
-                merge_update_record(tx, store_id, pg_table, device_id, record).await
+                merge_update_record(tx, store_id, pg_table, table_name, device_id, record).await
             } else {
                 // Server wins — log conflict
                 sqlx::query(
@@ -395,6 +489,7 @@ async fn merge_update_record(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     store_id: i32,
     pg_table: &str,
+    table_name: &str,
     device_id: &str,
     record: &ChangeRecord,
 ) -> Result<MergeOutcome, crate::error::AppError> {
@@ -416,8 +511,8 @@ async fn merge_update_record(
         if skip_fields.contains(&key.as_str()) {
             continue;
         }
-        // Map client field names to PG column names (handle known mappings)
-        let col = map_column_name(key);
+        // Map client field names to PG column names via COLUMN_MAPPINGS
+        let col = map_column_push(table_name, key);
         // Skip columns that don't exist in PG
         if !col_info.is_empty() && !col_info.contains_key(&col) {
             continue;
@@ -467,6 +562,7 @@ async fn insert_record_from_json(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     store_id: i32,
     pg_table: &str,
+    table_name: &str,
     device_id: &str,
     record: &ChangeRecord,
 ) -> Result<(), crate::error::AppError> {
@@ -529,7 +625,7 @@ async fn insert_record_from_json(
         if needs_invoice_local_id && key == "invoice_local_id" {
             continue;
         }
-        let col = map_column_name(key);
+        let col = map_column_push(table_name, key);
         // Skip columns that don't exist in PG
         if !col_info.is_empty() && !col_info.contains_key(&col) {
             continue;
@@ -785,78 +881,7 @@ pub async fn build_pull_changes(
         let mut data = record_data.unwrap_or(json!({}));
 
         // ── Transform data for client compatibility ──────────────────
-        if let Some(obj) = data.as_object_mut() {
-            // 1. Map local_id → id (client expects id = local SQLite rowid)
-            if let Some(local_id) = obj.get("local_id").cloned() {
-                obj.insert("id".to_string(), local_id);
-            }
-            // Also handle client_id (some tables use client_id instead of local_id)
-            if let Some(client_id) = obj.get("client_id").cloned() {
-                if !obj.contains_key("local_id") {
-                    obj.insert("id".to_string(), client_id);
-                }
-            }
-
-            // 2. Add created_at from synced_at if missing
-            if !obj.contains_key("created_at") || obj.get("created_at").map_or(false, |v| v.is_null()) {
-                if let Some(synced_at) = obj.get("synced_at").cloned() {
-                    obj.insert("created_at".to_string(), synced_at);
-                }
-            }
-
-            // 3. Column name renames — generic (safe for all tables)
-            //    Only fires if the source column exists; won't overwrite existing target.
-            let generic_renames: &[(&str, &str)] = &[
-                ("invoice_local_id",        "invoice_id"),
-                ("product_local_id",        "product_id"),
-                ("customer_local_id",       "customer_id"),
-                ("purchase_order_local_id", "purchase_order_id"),
-                ("return_local_id",         "return_id"),
-                ("transaction_type",        "type"),
-            ];
-            for (from, to) in generic_renames {
-                if let Some(v) = obj.remove(*from) {
-                    if !obj.contains_key(*to) {
-                        obj.insert(to.to_string(), v);
-                    }
-                }
-            }
-
-            // 4. Column name renames — table-specific
-            match table_name.as_str() {
-                "invoices" => {
-                    // notes → note
-                    if let Some(v) = obj.remove("notes") {
-                        if !obj.contains_key("note") {
-                            obj.insert("note".to_string(), v);
-                        }
-                    }
-                }
-                "invoice_items" => {
-                    // total → subtotal
-                    if let Some(v) = obj.remove("total") {
-                        if !obj.contains_key("subtotal") {
-                            obj.insert("subtotal".to_string(), v);
-                        }
-                    }
-                }
-                "suppliers" => {
-                    // company → name (only when name is absent)
-                    if !obj.contains_key("name") {
-                        if let Some(v) = obj.remove("company") {
-                            obj.insert("name".to_string(), v);
-                        }
-                    }
-                }
-                _ => {}
-            }
-
-            // 5. Remove server-internal fields
-            for key in &["store_id", "synced_at", "device_id", "updated_at_v2",
-                         "local_id", "client_id"] {
-                obj.remove(*key);
-            }
-        }
+        transform_record_for_pull(&mut data, table_name);
 
         let entry = changes.entry(table_name.clone()).or_insert_with(Vec::new);
         entry.push(PullChangeRecord {
@@ -953,6 +978,153 @@ async fn pull_customer_computed(
 }
 
 // ============================================================
+// Pull transform helper — shared by build_pull_changes & build_snapshot
+// ============================================================
+
+/// Transform a row_to_json record into the format Desktop expects.
+///
+/// Sprint 140: tries Serde-based transform first (compile-time column mapping
+/// via sync_models.rs). Falls back to COLUMN_MAPPINGS for unknown tables.
+///
+/// Applies: local_id/client_id→id, created_at fallback, column renames,
+/// and removes server-internal fields.
+fn transform_record_for_pull(data: &mut Value, table_name: &str) {
+    // ── Pre-step: Add created_at from synced_at if missing ─────────────
+    // Must happen before Serde transform since structs may expect created_at.
+    if let Some(obj) = data.as_object_mut() {
+        if !obj.contains_key("created_at") || obj.get("created_at").map_or(false, |v| v.is_null()) {
+            if let Some(synced_at) = obj.get("synced_at").cloned() {
+                obj.insert("created_at".to_string(), synced_at);
+            }
+        }
+    }
+
+    // ── Sprint 140: Try Serde transform first ─────────────────────────
+    // Serde structs handle: local_id→id, column renames, skip server fields.
+    if let Some(transformed) = serde_transform_for_pull(data, table_name) {
+        *data = transformed;
+        return;
+    }
+
+    // ── Fallback: manual transform via COLUMN_MAPPINGS (deprecated) ───
+    if let Some(obj) = data.as_object_mut() {
+        // 1. Map local_id → id (client expects id = local SQLite rowid)
+        if let Some(local_id) = obj.get("local_id").cloned() {
+            obj.insert("id".to_string(), local_id);
+        }
+        // Also handle client_id (some tables use client_id instead of local_id)
+        if let Some(client_id) = obj.get("client_id").cloned() {
+            if !obj.contains_key("local_id") {
+                obj.insert("id".to_string(), client_id);
+            }
+        }
+
+        // 2. Column name renames — via COLUMN_MAPPINGS (deprecated fallback)
+        let vps_keys: Vec<String> = obj.keys().cloned().collect();
+        let mut renames: Vec<(String, Value)> = Vec::new();
+        for vps_key in &vps_keys {
+            let desktop_key = map_column_pull(table_name, vps_key);
+            if desktop_key != *vps_key {
+                if let Some(v) = obj.remove(vps_key.as_str()) {
+                    if !obj.contains_key(&desktop_key) {
+                        renames.push((desktop_key, v));
+                    } else {
+                        // Target already exists, put back
+                        obj.insert(vps_key.clone(), v);
+                    }
+                }
+            }
+        }
+        for (desktop_key, val) in renames {
+            obj.insert(desktop_key, val);
+        }
+
+        // 3. Remove server-internal fields
+        for key in &["store_id", "synced_at", "device_id", "updated_at_v2",
+                     "local_id", "client_id"] {
+            obj.remove(*key);
+        }
+    }
+}
+
+// ============================================================
+// SNAPSHOT — Full state dump for fresh devices (Sprint 137)
+// ============================================================
+
+/// All tables to include in snapshot: (client_name, pg_table).
+const SNAPSHOT_TABLES: &[(&str, &str)] = &[
+    ("products", "synced_products"),
+    ("product_units", "synced_product_units"),
+    ("customers", "synced_customers"),
+    ("suppliers", "synced_suppliers"),
+    ("invoices", "synced_invoices"),
+    ("invoice_items", "synced_invoice_items"),
+    ("invoice_payments", "synced_invoice_payments"),
+    ("purchase_orders", "synced_purchase_orders"),
+    ("purchase_items", "synced_purchase_items"),
+    ("customer_transactions", "synced_customer_transactions"),
+    ("supplier_transactions", "synced_supplier_transactions"),
+    ("cash_transactions", "synced_cash_transactions"),
+    ("product_transactions", "synced_product_transactions"),
+    ("product_batches", "synced_product_batches"),
+    ("payment_vouchers", "synced_payment_vouchers"),
+    ("store_funds", "synced_store_funds"),
+    ("store_settings", "synced_store_settings"),
+    ("returns", "synced_returns"),
+    ("return_items", "synced_return_items"),
+    ("daily_closings", "synced_daily_closings"),
+    ("promotions", "synced_promotions"),
+    ("vouchers", "synced_vouchers"),
+    ("loyalty_transactions_v2", "synced_loyalty_transactions_v2"),
+];
+
+/// Build a full snapshot of all synced tables for a store.
+/// Returns (snapshot_map, watermark_cursor).
+pub async fn build_snapshot(
+    pool: &PgPool,
+    store_id: i32,
+) -> Result<(HashMap<String, Vec<Value>>, i64), crate::error::AppError> {
+    let mut snapshot: HashMap<String, Vec<Value>> = HashMap::new();
+
+    for &(client_name, pg_table) in SNAPSHOT_TABLES {
+        let sql = format!(
+            "SELECT row_to_json(t) FROM (SELECT * FROM {} WHERE store_id = $1) t",
+            pg_table
+        );
+
+        let rows: Vec<Value> = sqlx::query_scalar(&sql)
+            .bind(store_id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+
+        let mut transformed: Vec<Value> = Vec::with_capacity(rows.len());
+        for mut row in rows {
+            transform_record_for_pull(&mut row, client_name);
+            transformed.push(row);
+        }
+
+        snapshot.insert(client_name.to_string(), transformed);
+    }
+
+    // Watermark cursor: MAX(id) from sync_journal for this store
+    let watermark: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(id), 0) FROM sync_journal WHERE store_id = $1"
+    )
+    .bind(store_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0);
+
+    tracing::info!(
+        "📸 Snapshot: store_id={}, tables={}, watermark={}",
+        store_id, SNAPSHOT_TABLES.len(), watermark
+    );
+
+    Ok((snapshot, watermark))
+}
+
+// ============================================================
 // Helpers
 // ============================================================
 
@@ -989,14 +1161,7 @@ fn track_affected_uuids(
     }
 }
 
-/// Map client-side field names to PG column names where they differ
-fn map_column_name(client_key: &str) -> String {
-    match client_key {
-        "current_debt" => "total_debt".to_string(),
-        "type" => "\"type\"".to_string(),
-        _ => client_key.to_string(),
-    }
-}
+// map_column_name removed — replaced by map_column_push/map_column_pull (Sprint 134B)
 
 /// Query column info from information_schema for type-aware casting
 async fn get_column_info(
