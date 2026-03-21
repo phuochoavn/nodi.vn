@@ -59,13 +59,16 @@
 
 | App column | VPS column | Bảng | Ghi chú |
 |------------|-----------|------|---------|
+| `id` | `local_id` | **Tất cả bảng** | ⚡ Catch-all: VPS local_id = App id |
 | `type` | `transaction_type` | `customer_transactions`, `supplier_transactions` | VPS dùng tên dài hơn |
 | `name` | `company` | `suppliers` | VPS gọi "company" thay "name" |
 | `invoice_id` | `invoice_local_id` | `invoice_items` | VPS dùng `_local_id` suffix |
-| `product_id` | `product_local_id` | `invoice_items` | VPS dùng `_local_id` suffix |
+| `product_id` | `product_local_id` | `invoice_items`, `purchase_items`, `return_items`, `product_units`, `product_batches`, `product_transactions` | VPS dùng `_local_id` suffix |
 | `subtotal` | `total` | `invoice_items` | VPS gọi `total` thay `subtotal` |
 | `customer_id` | `customer_local_id` | `invoices` | VPS dùng `_local_id` suffix |
 | `note` | `notes` | `invoices` | VPS plural form |
+| `purchase_order_id` | `purchase_order_local_id` | `purchase_items` | VPS dùng `_local_id` suffix |
+| `return_id` | `return_local_id` | `return_items` | VPS dùng `_local_id` suffix |
 
 ---
 
@@ -142,4 +145,4 @@
 
 ---
 
-*Cập nhật lần cuối: 18/03/2026 — sau 12 lần fix V2 sync*
+*Cập nhật lần cuối: 18/03/2026 — sau 15 lần fix V2 sync*

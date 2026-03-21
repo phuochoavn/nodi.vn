@@ -164,14 +164,39 @@
 
 ---
 
+## Bug #16: `local_id` mapping thiếu → tất cả bảng
+- **Phát hiện**: 18/03/2026
+- **Triệu chứng**: Invoices pull về 0, products pull OK (VPS đã fix riêng cho products)
+- **Root cause**: `vps_to_app_column()` thiếu `(_, "local_id") => Some("id")`
+- **Fix**: Thêm catch-all mapping + FK mappings cho child tables
+- **File**: `sync_v2_pull.rs`
+
+---
+
+## Bug #17: invoice_number UNIQUE conflict
+- **Phát hiện**: 18/03/2026
+- **Triệu chứng**: UPSERT fail khi pull invoice có `invoice_number` trùng với record cũ (khác uuid)
+- **Fix**: DELETE conflicting records trước UPSERT (pattern giống products/suppliers)
+- **File**: `sync_v2_pull.rs`
+
+---
+
+## Bug #18: Cursor advance dù pull có lỗi
+- **Phát hiện**: 18/03/2026
+- **Triệu chứng**: UPSERT fail nhưng cursor advance → không retry → data mất vĩnh viễn
+- **Fix**: Error counting, abort + giữ cursor nếu > 30% fail
+- **File**: `sync_v2_pull.rs`
+
+---
+
 ## Thống kê
 
 | Loại | Số lượng |
 |------|:--------:|
 | App Push bugs | 2 (#1, #9) |
-| App Pull bugs | 5 (#2, #3, #4, #5, #6, #14) |
+| App Pull bugs | 8 (#2, #3, #4, #5, #6, #14, #16, #17, #18) |
 | VPS bugs | 8 (#7, #8, #10, #11, #12, #13, #15) |
-| **Tổng** | **15** |
+| **Tổng** | **18** |
 
 ---
 

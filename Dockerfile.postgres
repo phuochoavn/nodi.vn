@@ -1,0 +1,13 @@
+# Sprint 160: PostgreSQL 16 + pgBackRest for WAL archiving & PITR
+FROM postgres:16-alpine
+
+# Install pgbackrest
+RUN apk add --no-cache pgbackrest
+
+# Create pgbackrest directories
+RUN mkdir -p /etc/pgbackrest /var/log/pgbackrest /var/lib/pgbackrest /var/spool/pgbackrest \
+    && chown -R postgres:postgres /var/log/pgbackrest /var/lib/pgbackrest /var/spool/pgbackrest
+
+# Copy pgbackrest config
+COPY pgbackrest.conf /etc/pgbackrest/pgbackrest.conf
+RUN chown postgres:postgres /etc/pgbackrest/pgbackrest.conf

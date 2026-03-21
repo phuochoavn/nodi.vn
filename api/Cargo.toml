@@ -20,3 +20,7 @@ uuid = { version = "1", features = ["v4"] }
 dotenvy = "0.15"
 rand = "0.8"
 rust_xlsxwriter = "0.79"
+prost = "0.13"
+dashmap = "5"
+axum-prometheus = "0.7"
+governor = "0.6"

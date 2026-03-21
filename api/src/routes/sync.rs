@@ -681,7 +681,7 @@ async fn handle_sync(
     if !changed.is_empty() {
         crate::routes::ws_sync::broadcast_sync_event(
             &state.sync_rooms, store_id, &changed
-        ).await;
+        );
     }
 
     tracing::info!("✅ Sync complete for store_id={}, counts={:?}", store_id, counts);

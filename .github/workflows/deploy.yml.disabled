@@ -1,0 +1,43 @@
+# Sprint 167: Zero-downtime deploy to VPS
+name: Deploy VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - 'docker-compose.yml'
+      - 'Dockerfile.postgres'
+      - 'monitoring/**'
+      - 'nginx/**'
+
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: /opt/nodi/scripts/deploy.sh
+          timeout: 300s
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            curl -sf https://api.nodi.vn/api/health && echo "✅ Production healthy" || echo "❌ Production unhealthy"
+          timeout: 30s
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "::error::Deployment failed! Check VPS logs at /opt/nodi/logs/"

@@ -900,17 +900,10 @@ async fn force_resync(
         "message": "Server requests full data re-sync"
     }).to_string();
 
-    let ws_count = {
-        let rooms = state.sync_rooms.read().await;
-        if let Some(clients) = rooms.get(&sid) {
-            for tx in clients {
-                let _ = tx.send(msg.clone());
-            }
-            clients.len()
-        } else {
-            0
-        }
-    };
+    // Sprint 164: Broadcast via DashMap registry (lock-free)
+    let ws_count = crate::routes::ws_sync::broadcast_message(
+        &state.sync_rooms, sid, msg
+    );
 
     tracing::info!("🔄 Force re-sync: store_id={}, inbox_cleared={}, journal_cleared={}, ws_notified={}",
         sid, inbox_deleted, journal_deleted, ws_count);

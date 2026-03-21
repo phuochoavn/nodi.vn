@@ -8,7 +8,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
 use std::collections::HashMap;
+use dashmap::DashMap;
+use axum_prometheus::PrometheusMetricLayer;
 use tokio::sync::RwLock;
+
 
 mod config;
 mod db;
@@ -25,7 +28,7 @@ pub type WsSender = tokio::sync::mpsc::UnboundedSender<String>;
 pub type ChatRooms = Arc<RwLock<HashMap<i32, Vec<(String, String, WsSender)>>>>;
 
 /// Sync rooms: store_id → list of WebSocket senders for real-time sync
-pub type SyncRooms = Arc<RwLock<HashMap<i32, Vec<WsSender>>>>;
+pub type SyncRooms = Arc<DashMap<i32, tokio::sync::broadcast::Sender<String>>>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,6 +37,7 @@ pub struct AppState {
     pub start_time: Instant,
     pub chat_rooms: ChatRooms,
     pub sync_rooms: SyncRooms,
+    pub store_rate_limiters: middleware::rate_limit::StoreRateLimiters,
 }
 
 /// Security headers middleware
@@ -75,7 +79,8 @@ async fn main() {
         config: Arc::new(config),
         start_time: Instant::now(),
         chat_rooms: Arc::new(RwLock::new(HashMap::new())),
-        sync_rooms: Arc::new(RwLock::new(HashMap::new())),
+        sync_rooms: Arc::new(DashMap::new()),
+        store_rate_limiters: middleware::rate_limit::new_store_limiters(),
     };
 
     let allowed_origins = [
@@ -97,6 +102,9 @@ async fn main() {
         .allow_credentials(true);
 
 
+    // Sprint 166: Prometheus metrics
+    let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
+
     let app = Router::new()
         .merge(routes::health::router())
         .merge(routes::license::router())
@@ -117,7 +125,21 @@ async fn main() {
         .merge(routes::einvoice::router())
         .merge(routes::staff_invite::router())
         .merge(routes::payment::router())
-        .merge(routes::sync_v2::router())
+        .merge(routes::onboarding::router())
+        // V2 sync routes — with tenant middleware + rate limiting (Sprint 168)
+        .merge(
+            routes::sync_v2::router()
+                .layer(axum::middleware::from_fn_with_state(
+                    state.store_rate_limiters.clone(),
+                    middleware::rate_limit::rate_limit_middleware,
+                ))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    middleware::tenant::tenant_middleware,
+                ))
+        )
+        .route("/metrics", axum::routing::get(|| async move { metric_handle.render() }))
+        .layer(prometheus_layer)
         .layer(axum::middleware::from_fn(security_headers))
         .layer(cors)
         .layer(TraceLayer::new_for_http())

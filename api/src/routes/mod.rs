@@ -18,3 +18,4 @@ pub mod staff_invite;
 pub mod payment;
 pub mod ws_sync;
 pub mod sync_v2;
+pub mod onboarding;

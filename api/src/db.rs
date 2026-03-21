@@ -3,17 +3,28 @@ use sqlx::PgPool;
 
 pub async fn create_pool(database_url: &str) -> PgPool {
     PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(100) // Sprint 155: PgBouncer manages real PG connections (50 pool)
         .connect(database_url)
         .await
         .expect("Failed to connect to PostgreSQL")
 }
 
-/// Seed admin user on first run if ADMIN_PASSWORD env var is set
+/// Seed admin user on first run if ADMIN_PASSWORD secret/env var is set
 pub async fn seed_admin(pool: &PgPool) {
-    let password = match std::env::var("ADMIN_PASSWORD") {
-        Ok(p) => p,
-        Err(_) => return, // No ADMIN_PASSWORD set, skip seeding
+    // Sprint 163: Try Docker Secret file first, then env var
+    let password = if std::path::Path::new("/run/secrets/admin_password").exists() {
+        match std::fs::read_to_string("/run/secrets/admin_password") {
+            Ok(val) => val.trim().to_string(),
+            Err(_) => match std::env::var("ADMIN_PASSWORD") {
+                Ok(p) => p,
+                Err(_) => return,
+            },
+        }
+    } else {
+        match std::env::var("ADMIN_PASSWORD") {
+            Ok(p) => p,
+            Err(_) => return, // No ADMIN_PASSWORD set, skip seeding
+        }
     };
 
     let admin_phone = std::env::var("ADMIN_PHONE").unwrap_or_else(|_| "0374222326".to_string());
@@ -211,6 +222,7 @@ pub async fn sync_v2_init(pool: &PgPool) {
         "synced_returns",
         "synced_return_items",
         "synced_loyalty_transactions_v2",
+        "synced_store_funds",
     ];
 
     for table in &synced_tables {
@@ -240,6 +252,17 @@ pub async fn sync_v2_init(pool: &PgPool) {
         );
         sqlx::query(&sql_upd).execute(pool).await.ok();
     }
+
+    // ── Sprint 134B: Add missing columns ───────────────────────────────────
+    sqlx::query("ALTER TABLE synced_products ADD COLUMN IF NOT EXISTS sell_price DOUBLE PRECISION").execute(pool).await.ok();
+    sqlx::query("ALTER TABLE synced_products ADD COLUMN IF NOT EXISTS sku TEXT").execute(pool).await.ok();
+    sqlx::query("ALTER TABLE synced_products ADD COLUMN IF NOT EXISTS min_stock DOUBLE PRECISION").execute(pool).await.ok();
+    sqlx::query("ALTER TABLE synced_invoice_items ADD COLUMN IF NOT EXISTS created_at TEXT").execute(pool).await.ok();
+    sqlx::query("ALTER TABLE synced_invoice_items ADD COLUMN IF NOT EXISTS product_sku TEXT").execute(pool).await.ok();
+
+    // ── Sprint 161: Onboarding — add activation_key to stores ─────────────
+    sqlx::query("ALTER TABLE stores ADD COLUMN IF NOT EXISTS activation_key VARCHAR(10) UNIQUE").execute(pool).await.ok();
+    sqlx::query("ALTER TABLE stores ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP").execute(pool).await.ok();
 
     // ── 2. sync_inbox — staging table for incoming changes ──────────────────
     sqlx::query(
@@ -321,6 +344,77 @@ pub async fn sync_v2_init(pool: &PgPool) {
          END; \
          $$ LANGUAGE plpgsql"
     ).execute(pool).await.ok();
+
+    // ── Sprint 153: RLS policies on all synced_* tables ───────────────────
+    tracing::info!("🔒 Sprint 153: Enabling RLS on synced_* tables...");
+
+    for table in &synced_tables {
+        // Enable RLS
+        let sql_enable = format!("ALTER TABLE {} ENABLE ROW LEVEL SECURITY", table);
+        sqlx::query(&sql_enable).execute(pool).await.ok();
+
+        // Force RLS (even for table owner)
+        let sql_force = format!("ALTER TABLE {} FORCE ROW LEVEL SECURITY", table);
+        sqlx::query(&sql_force).execute(pool).await.ok();
+
+        // Drop + recreate policy (idempotent)
+        let sql_drop = format!("DROP POLICY IF EXISTS tenant_isolation ON {}", table);
+        sqlx::query(&sql_drop).execute(pool).await.ok();
+
+        // Graceful fallback: allow access when current_store_id is not set (empty string)
+        // This ensures V1 handlers and direct pool queries still work.
+        // When SET LOCAL is used (via TenantTransaction), RLS filters by store_id.
+        let sql_policy = format!(
+            "CREATE POLICY tenant_isolation ON {} \
+             FOR ALL USING (\
+               current_setting('app.current_store_id', true) = '' \
+               OR store_id = current_setting('app.current_store_id')::integer\
+             )",
+            table
+        );
+        sqlx::query(&sql_policy).execute(pool).await.ok();
+    }
+
+    // Composite indexes on 6 large tables (store_id, updated_at_v2 DESC)
+    let large_tables = [
+        ("idx_invoices_store_updated", "synced_invoices"),
+        ("idx_invoice_items_store_updated", "synced_invoice_items"),
+        ("idx_product_tx_store_updated", "synced_product_transactions"),
+        ("idx_customer_tx_store_updated", "synced_customer_transactions"),
+        ("idx_supplier_tx_store_updated", "synced_supplier_transactions"),
+        ("idx_purchase_orders_store_updated", "synced_purchase_orders"),
+    ];
+    for (idx_name, table) in &large_tables {
+        let sql_idx = format!(
+            "CREATE INDEX IF NOT EXISTS {} ON {} (store_id, updated_at_v2 DESC)",
+            idx_name, table
+        );
+        sqlx::query(&sql_idx).execute(pool).await.ok();
+    }
+
+    tracing::info!("✅ Sprint 153: RLS enabled on {} tables", synced_tables.len());
+
+    // ── Sprint 156: Partition prep — add partition_key column to transaction tables ──
+    let partition_tables = [
+        "synced_invoices",
+        "synced_invoice_items",
+        "synced_customer_transactions",
+        "synced_supplier_transactions",
+        "synced_product_transactions",
+        "synced_cash_transactions",
+    ];
+    for table in &partition_tables {
+        let sql = format!(
+            "ALTER TABLE {} ADD COLUMN IF NOT EXISTS partition_key TIMESTAMP NOT NULL DEFAULT NOW()",
+            table
+        );
+        sqlx::query(&sql).execute(pool).await.ok();
+    }
+
+    // Sprint 157: Run pg_partman maintenance if extension is installed
+    // Safe no-op if pg_partman is not installed or tables not yet partitioned
+    sqlx::query("SELECT partman.run_maintenance_proc()")
+        .execute(pool).await.ok();
 
     tracing::info!("✅ Sync V2 migrations complete");
 }

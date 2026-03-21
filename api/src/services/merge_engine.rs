@@ -63,6 +63,9 @@ pub async fn process_push(
 
     let mut tx = pool.begin().await?;
 
+    // Sprint 153: Set tenant context for RLS policies
+    crate::middleware::tenant::set_tenant_on_tx(&mut tx, store_id).await?;
+
     for (table_name, records) in changes {
         let meta = match get_table_meta(table_name) {
             Some(m) => m,
@@ -919,6 +922,13 @@ pub async fn build_pull_changes(
         }
     }
 
+    if !affected_supplier_uuids.is_empty() {
+        let supplier_updates = pull_supplier_computed(pool, store_id).await?;
+        if !supplier_updates.is_empty() {
+            computed_updates.insert("suppliers".to_string(), supplier_updates);
+        }
+    }
+
     // Update device pull_cursor
     sqlx::query(
         "UPDATE sync_devices SET pull_cursor = $3 WHERE store_id = $1 AND device_id = $2"
@@ -965,6 +975,28 @@ async fn pull_customer_computed(
         "SELECT c.uuid, c.total_debt::float8 \
          FROM synced_customers c \
          WHERE c.store_id = $1 AND c.uuid IS NOT NULL"
+    )
+    .bind(store_id)
+    .fetch_all(pool)
+    .await?;
+
+    for (uuid, debt) in rows {
+        result.insert(uuid, json!({ "current_debt": debt }));
+    }
+
+    Ok(result)
+}
+
+async fn pull_supplier_computed(
+    pool: &PgPool,
+    store_id: i32,
+) -> Result<HashMap<String, Value>, crate::error::AppError> {
+    let mut result = HashMap::new();
+
+    let rows: Vec<(String, Option<f64>)> = sqlx::query_as(
+        "SELECT s.uuid, s.total_debt::float8 \
+         FROM synced_suppliers s \
+         WHERE s.store_id = $1 AND s.uuid IS NOT NULL"
     )
     .bind(store_id)
     .fetch_all(pool)

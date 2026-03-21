@@ -2,6 +2,75 @@
 
 ---
 
+## 🔧 18/03/2026 (14:00–17:00) — Sync Foundation Fix: 3 Agent Diagnosis + Client/Server Fix
+
+### Mục tiêu
+Giải quyết vấn đề 3 ngày: Mobile không nhận data từ VPS (0 invoices, giá 0đ), PC và Mobile không khớp dữ liệu.
+
+### Quy trình (Executive Assistant điều phối)
+
+| Thời gian | Hành động | Kết quả |
+|-----------|-----------|---------|
+| 14:00 | Phân tích code: Mobile vs PC sync flow | ✅ Code frontend 100% giống nhau |
+| 14:30 | Viết VPS diagnostic prompt → VPS Agent | ✅ VPS agent xác nhận ĐÃ GỬI 9 changes |
+| 15:15 | Nhận VPS Report + Screenshots anh Hoa | ✅ Xác nhận Mobile 0 invoices, PC 2 SP |
+| 15:24 | Viết 3 agent briefs (VPS, PC, Mobile) | ✅ Gửi song song |
+| 15:48 | Nhận VPS Report #2: **Root cause = CLIENT** | 🔴 Mobile nhận invoices nhưng KHÔNG LƯU |
+| 16:29 | Nhận PC Report: **Dev DB stale (01/2026)** | 🔴 PC dev DB thiếu sync infra |
+| 16:33 | Tổng hợp → Implementation Plan → Approved | ✅ 4 App changes + 2 VPS changes |
+| 16:37 | Gửi App Agent + VPS Agent briefs song song | ✅ Cả 2 hoàn thành |
+| 17:00 | Code review + Build verify | ✅ 0 errors |
+
+### 3 Root Causes Xác Định
+
+| # | Bug | Root Cause | Severity |
+|:-:|-----|-----------|:--------:|
+| 16 | `local_id` mapping thiếu | `vps_to_app_column()` không map `local_id → id` | 🔴 P0 |
+| 17 | invoice_number UNIQUE conflict | UPSERT fail khi pull invoice trùng number | 🔴 P0 |
+| 18 | Cursor advance dù có lỗi | Error bị nuốt bởi `println!()`, cursor vẫn advance | 🔴 P0 |
+
+### App Agent — 4 Thay Đổi (`sync_v2_pull.rs`)
+
+1. **`(_, "local_id") => Some("id")`** + 10 FK mappings (purchase_items, return_items, product_units, product_batches, product_transactions)
+2. **invoice_number + product_units** UNIQUE conflict handling (DELETE before UPSERT)
+3. **Error counting + cursor rollback** (>30% fail → giữ cursor để retry)
+4. **Enhanced skip logging** (format `key(→mapped)` thay vì chỉ key)
+
+### VPS Agent — 2 Thay Đổi (`merge_engine.rs`)
+
+1. **`build_pull_changes()` transform**: remap `local_id→id`, strip `store_id/synced_at/updated_at_v2`, rename FK columns (6 generic + 3 table-specific)
+2. **Journal dedup**: 339→260 entries, duplicate invoice INV-1773658398 removed
+
+### Khác
+- PC dev DB `agripos.db` renamed → `agripos_backup_20260318.db` (stale từ 25/01/2026)
+- Docs cập nhật: `sync-known-issues.md` (bugs #16-18), `sync-schema-contract.md` (FK mappings)
+
+### Bài học
+1. **Defense-in-depth**: VPS transform đúng + App phòng thủ = không phụ thuộc 1 bên
+2. **Error không được nuốt**: `println!()` + continue = cursor advance = data mất vĩnh viễn
+3. **Schema contract**: `local_id` là VPS-only nhưng không ai map → cả team không biết
+4. **3 agent song song**: VPS/PC/Mobile report cùng lúc tiết kiệm 2/3 thời gian debug
+5. **Executive Assistant model**: Không code, chỉ phân tích + viết briefs → hiệu quả cao
+
+### Files thay đổi
+
+| File | Agent | Mô tả |
+|------|-------|-------|
+| `sync_v2_pull.rs` | App | 4 fixes: local_id mapping + UNIQUE + error counting + logging |
+| `sync_v2_push.rs` | (previous) | mark_journal_synced fix |
+| `syncStore.ts` | (previous) | WebSocket optimization |
+| `sync-known-issues.md` | App | Bugs #16-18 |
+| `sync-schema-contract.md` | App | FK mappings updated |
+
+### Build
+- `npm run build` ✅ 0 errors (19.15s)
+
+### Tiếp theo
+- [ ] Mobile test: Reset Cursor → Pull → verify invoices_count > 0
+- [ ] Build APK mới → test trên điện thoại
+
+---
+
 ## 🔄 16/03/2026 (13:00–17:00) — V2 Sync Engine Debugging: Push + Pull Schema Reconciliation
 
 ### Mục tiêu

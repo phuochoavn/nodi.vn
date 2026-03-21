@@ -1,0 +1,78 @@
+// Proto schema reference file — NOT compiled via build.rs.
+// This file documents the wire format for client team reference.
+// The Rust structs are hand-written in src/models/proto.rs using prost derive macros.
+
+syntax = "proto3";
+package pos.sync.v2;
+
+// ============================================================
+// Push
+// ============================================================
+
+message ChangeRecord {
+  string uuid = 1;
+  string table_name = 2;
+  string action = 3;    // INSERT, UPDATE, DELETE
+  bytes data = 4;       // JSON-encoded row data
+  int64 timestamp = 5;
+}
+
+message SyncPushRequest {
+  string device_id = 1;
+  string batch_id = 2;
+  repeated ChangeRecord changes = 3;
+  optional int64 max_journal_id = 4;
+}
+
+message ConflictInfo {
+  string table_name = 1;
+  string record_uuid = 2;
+  string resolution = 3;  // SERVER_WINS, CLIENT_WINS, MERGED
+}
+
+message SyncPushResponse {
+  bool success = 1;
+  string message = 2;
+  int64 new_cursor = 3;
+  int32 processed = 4;
+  repeated ConflictInfo conflicts = 5;
+  bytes computed_updates = 6;  // JSON-encoded HashMap
+  optional int64 last_processed_client_tx_id = 7;
+}
+
+// ============================================================
+// Pull
+// ============================================================
+
+message PullChangeRecord {
+  string uuid = 1;
+  string operation = 2;
+  bytes data = 3;        // JSON-encoded row data
+}
+
+message PullTableChanges {
+  string table_name = 1;
+  repeated PullChangeRecord records = 2;
+}
+
+message SyncPullResponse {
+  bool success = 1;
+  int64 cursor = 2;
+  bool has_more = 3;
+  repeated PullTableChanges changes = 4;
+  bytes computed_updates = 5;  // JSON-encoded HashMap
+}
+
+// ============================================================
+// Snapshot
+// ============================================================
+
+message SnapshotTable {
+  string table_name = 1;
+  repeated bytes records = 2;  // Each: JSON-encoded row
+}
+
+message SyncSnapshotResponse {
+  repeated SnapshotTable tables = 1;
+  int64 watermark_cursor = 2;
+}

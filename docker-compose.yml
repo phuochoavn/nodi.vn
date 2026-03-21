@@ -23,20 +23,57 @@ services:
       - nodi-network
 
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     container_name: nodi-postgres
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    secrets:
+      - postgres_password
+      - r2_api_key
+      - r2_secret
     environment:
       POSTGRES_DB: nodi
       POSTGRES_USER: nodi_admin
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Sprint 163: Read password from Docker Secret (built-in support)
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      # R2 keys — pgbackrest reads from env, sourced via entrypoint
+      PGBACKREST_R2_KEY_FILE: /run/secrets/r2_api_key
+      PGBACKREST_R2_SECRET_FILE: /run/secrets/r2_secret
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./data/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports:
-      - "127.0.0.1:5432:5432"
+      - ./secrets/gcs_service_account.json:/etc/pgbackrest/gcs_service_account.json:ro
+      - ./pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - pgbackrest-spool:/var/spool/pgbackrest
+      - pgbackrest-log:/var/log/pgbackrest
+    # Sprint 155: Port removed — access only via PgBouncer
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     shm_size: '2g'
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: nodi-pgbouncer
+    environment:
+      DB_USER: nodi_app
+      DB_PASSWORD: "0a809113742d4c5d40b949a4a890efd2fc451e0e496d60fc"
+      DB_HOST: postgres
+      DB_NAME: nodi
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 10000
+      DEFAULT_POOL_SIZE: 50
+      SERVER_RESET_QUERY: ""
+      AUTH_TYPE: scram-sha-256
+      SERVER_RESET_QUERY_ALWAYS: 0
+      SERVER_CHECK_DELAY: 30
+      CLIENT_IDLE_TIMEOUT: 60
+    depends_on:
+      - postgres
     restart: unless-stopped
     networks:
       - nodi-network
@@ -46,18 +83,32 @@ services:
       context: ./api
       dockerfile: Dockerfile
     container_name: nodi-api
+    secrets:
+      - db_password
+      - jwt_secret
+      - admin_password
     environment:
-      DATABASE_URL: postgres://nodi_admin:${POSTGRES_PASSWORD}@postgres:5432/nodi
-      JWT_SECRET: ${JWT_SECRET}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Sprint 163: Sensitive values moved to Docker Secrets (/run/secrets/*)
+      # Axum reads secrets from file with env fallback for local dev
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_NAME: nodi
+      DB_USER: nodi_app
       ADMIN_PHONE: ${ADMIN_PHONE}
       RUST_LOG: nodi_api=debug,tower_http=debug
     depends_on:
-      - postgres
+      - pgbouncer
     volumes:
       - ./backups:/opt/nodi/backups
       - ./uploads:/opt/nodi/uploads
       - ./downloads:/opt/nodi/downloads
+    # Sprint 167: Healthcheck for zero-downtime deploy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     networks:
       - nodi-network
@@ -75,6 +126,86 @@ services:
     networks:
       - nodi-network
 
+  # ============================================================
+  # Sprint 166: Monitoring stack
+  # ============================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: nodi-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - axum-api
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nodi-grafana
+    secrets:
+      - grafana_password
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_password
+      GF_SERVER_ROOT_URL: http://localhost:3002
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: nodi-postgres-exporter
+    secrets:
+      - db_password
+    environment:
+      DATA_SOURCE_URI: "pgbouncer:5432/nodi?sslmode=disable"
+      DATA_SOURCE_USER: nodi_app
+      DATA_SOURCE_PASS_FILE: /run/secrets/db_password
+    depends_on:
+      - pgbouncer
+    restart: unless-stopped
+    networks:
+      - nodi-network
+
 networks:
   nodi-network:
     driver: bridge
+
+volumes:
+  pgbackrest-spool:
+  pgbackrest-log:
+  prometheus_data:
+  grafana_data:
+
+# Sprint 163: Docker Secrets — files stored in /opt/nodi/secrets/ (chmod 700)
+secrets:
+  db_password:
+    file: /opt/nodi/secrets/db_password
+  postgres_password:
+    file: /opt/nodi/secrets/postgres_password
+  jwt_secret:
+    file: /opt/nodi/secrets/jwt_secret
+  r2_api_key:
+    file: /opt/nodi/secrets/r2_api_key
+  r2_secret:
+    file: /opt/nodi/secrets/r2_secret
+  admin_password:
+    file: /opt/nodi/secrets/admin_password
+  grafana_password:
+    file: /opt/nodi/secrets/grafana_password

@@ -1,0 +1,19 @@
+# Sprint 166: Prometheus configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+scrape_configs:
+  - job_name: 'axum-api'
+    static_configs:
+      - targets: ['axum-api:3000']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s

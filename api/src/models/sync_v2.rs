@@ -12,6 +12,9 @@ pub struct SyncV2PushRequest {
     pub batch_id: String,
     /// Map of table_name → list of change records
     pub changes: HashMap<String, Vec<ChangeRecord>>,
+    /// Client sends MAX(sync_journal.id) from this batch; VPS echoes it back
+    #[serde(default)]
+    pub max_journal_id: Option<i64>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -98,6 +101,7 @@ pub fn get_table_meta(client_name: &str) -> Option<TableMeta> {
         "promotions" => Some(TableMeta { pg_table: "synced_promotions", merge_rule: MergeRule::Lww, affects_computed: false }),
         "vouchers" => Some(TableMeta { pg_table: "synced_vouchers", merge_rule: MergeRule::Lww, affects_computed: false }),
         "store_settings" => Some(TableMeta { pg_table: "synced_store_settings", merge_rule: MergeRule::Lww, affects_computed: false }),
+        "store_funds" => Some(TableMeta { pg_table: "synced_store_funds", merge_rule: MergeRule::Lww, affects_computed: false }),
 
         // ── Append-only (UUID dedup) ──
         "invoices" => Some(TableMeta { pg_table: "synced_invoices", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
