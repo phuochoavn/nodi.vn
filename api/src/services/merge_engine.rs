@@ -293,28 +293,15 @@ const COLUMN_MAPPINGS: &[(&str, &[ColumnMap])] = &[
     ("invoice_payments", &[
         ColumnMap { desktop: "invoice_id", vps: "invoice_local_id" },
     ]),
-    ("purchase_items", &[
-        ColumnMap { desktop: "purchase_order_id", vps: "purchase_order_local_id" },
-        ColumnMap { desktop: "product_id", vps: "product_local_id" },
-    ]),
-    ("product_units", &[
-        ColumnMap { desktop: "product_id", vps: "product_local_id" },
-    ]),
-    ("product_batches", &[
-        ColumnMap { desktop: "product_id", vps: "product_local_id" },
-    ]),
-    ("customer_transactions", &[
-        ColumnMap { desktop: "customer_id", vps: "customer_local_id" },
-    ]),
-    ("supplier_transactions", &[
-        ColumnMap { desktop: "supplier_id", vps: "supplier_local_id" },
-    ]),
-    ("product_transactions", &[
-        ColumnMap { desktop: "product_id", vps: "product_local_id" },
-    ]),
+    // Sprint 172: purchase_items — PG columns are product_id and purchase_order_id
+    // (same as client field names, so NO mapping needed)
+    // Sprint 172: product_units, product_batches — PG column is product_id (not product_local_id)
+    // Sprint 172: customer_transactions — PG column is customer_id (not customer_local_id)
+    // Sprint 172: supplier_transactions — PG column is supplier_id (not supplier_local_id)
+    // Sprint 172: product_transactions — PG column is product_id (not product_local_id)
     ("return_items", &[
-        ColumnMap { desktop: "return_id", vps: "return_local_id" },
-        ColumnMap { desktop: "product_id", vps: "product_local_id" },
+        ColumnMap { desktop: "return_id", vps: "return_client_id" },
+        ColumnMap { desktop: "product_id", vps: "product_client_id" },
     ]),
     ("suppliers", &[
         ColumnMap { desktop: "name", vps: "company" },
@@ -1148,9 +1135,14 @@ pub async fn build_snapshot(
     .await
     .unwrap_or(0);
 
+    // Sprint 171A: Log per-table detail for diagnostic
+    let detail: Vec<String> = snapshot.iter()
+        .filter(|(_, v)| !v.is_empty())
+        .map(|(k, v)| format!("{}:{}", k, v.len()))
+        .collect();
     tracing::info!(
-        "📸 Snapshot: store_id={}, tables={}, watermark={}",
-        store_id, SNAPSHOT_TABLES.len(), watermark
+        "📸 Snapshot: store_id={}, tables={}, watermark={}, detail=[{}]",
+        store_id, SNAPSHOT_TABLES.len(), watermark, detail.join(", ")
     );
 
     Ok((snapshot, watermark))
