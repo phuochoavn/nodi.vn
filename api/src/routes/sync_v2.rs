@@ -210,23 +210,39 @@ async fn handle_pull(
         store_id, device_id, params.cursor, new_cursor, total_changes, has_more, respond_proto
     );
 
-    // Sprint 171A: Always return JSON for pull — protobuf encoding causes
-    // "buffer underflow" on client (ProtoPullResponse.changes decode fails).
-    // Push protobuf still works. Will re-enable pull protobuf after
-    // client proto definitions are verified.
+    // Sprint 173: Re-enable protobuf encoding for pull response.
+    // Proto structs verified to match client definitions (push already works).
     if respond_proto {
-        tracing::info!("📥 Pull: client requested protobuf, falling back to JSON (Sprint 171A workaround)");
+        let proto_changes: Vec<ProtoPullTableChanges> = changes.into_iter().map(|(table, records)| {
+            ProtoPullTableChanges {
+                table_name: table,
+                records: records.into_iter().map(|r| ProtoPullChangeRecord {
+                    uuid: r.uuid,
+                    operation: r.operation,
+                    data: serde_json::to_vec(&r.data).unwrap_or_default(),
+                }).collect(),
+            }
+        }).collect();
+        let proto_resp = ProtoPullResponse {
+            success: true,
+            cursor: new_cursor,
+            has_more,
+            changes: proto_changes,
+            computed_updates: serde_json::to_vec(&computed_updates).unwrap_or_default(),
+        };
+        tracing::info!("📥 Pull: responding with protobuf ({} bytes)", proto_resp.encoded_len());
+        Ok(proto_response(&proto_resp))
+    } else {
+        Ok(Json(json!({
+            "success": true,
+            "data": {
+                "cursor": new_cursor,
+                "has_more": has_more,
+                "changes": changes,
+                "computed_updates": computed_updates
+            }
+        })).into_response())
     }
-
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "cursor": new_cursor,
-            "has_more": has_more,
-            "changes": changes,
-            "computed_updates": computed_updates
-        }
-    })).into_response())
 }
 
 // ============================================================
@@ -266,15 +282,27 @@ async fn handle_snapshot(
         table_summary.join(", ")
     );
 
-    // Sprint 171A: Always return JSON for snapshot — protobuf encoding loses
-    // table keys (they become empty strings), causing client crash.
-    // Same fix as pull endpoint.
+    // Sprint 173: Re-enable protobuf encoding for snapshot response.
+    // Proto structs verified to match client definitions.
     if respond_proto {
-        tracing::info!("📸 Snapshot: client requested protobuf, falling back to JSON (Sprint 171A workaround)");
+        let proto_tables: Vec<ProtoSnapshotTable> = snapshot.into_iter().map(|(table, records)| {
+            ProtoSnapshotTable {
+                table_name: table,
+                records: records.into_iter().map(|r| {
+                    serde_json::to_vec(&r).unwrap_or_default()
+                }).collect(),
+            }
+        }).collect();
+        let proto_resp = ProtoSnapshotResponse {
+            tables: proto_tables,
+            watermark_cursor,
+        };
+        tracing::info!("📸 Snapshot: responding with protobuf ({} bytes)", proto_resp.encoded_len());
+        Ok(proto_response(&proto_resp))
+    } else {
+        Ok(Json(json!({
+            "snapshot": snapshot,
+            "watermark_cursor": watermark_cursor
+        })).into_response())
     }
-
-    Ok(Json(json!({
-        "snapshot": snapshot,
-        "watermark_cursor": watermark_cursor
-    })).into_response())
 }
