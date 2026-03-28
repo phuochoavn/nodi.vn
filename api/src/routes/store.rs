@@ -86,9 +86,14 @@ async fn switch_store(
         }
     };
 
+    // Query plan_type from accounts for JWT
+    let plan_type: String = sqlx::query_scalar(
+        "SELECT COALESCE(plan_type, 'free') FROM accounts WHERE id = $1"
+    ).bind(user_id).fetch_optional(&state.pool).await?.unwrap_or_else(|| "free".to_string());
+
     // Generate new JWT with this store's data_store_id
-    let token = crate::middleware::auth::create_token(user_id, data_store_id, &role, &state.config.jwt_secret)?;
-    let refresh_token = crate::middleware::auth::create_refresh_token(user_id, data_store_id, &role, &state.config.jwt_secret)?;
+    let token = crate::middleware::auth::create_token(user_id, data_store_id, &role, &plan_type, &state.config.jwt_secret)?;
+    let refresh_token = crate::middleware::auth::create_refresh_token(user_id, data_store_id, &role, &plan_type, &state.config.jwt_secret)?;
 
     tracing::info!("🔄 Store switched: user_id={}, store_id={}, data_store_id={}", user_id, store_id, data_store_id);
 

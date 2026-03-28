@@ -1,4 +1,5 @@
 use axum::{Router, Json, routing::post, extract::State};
+use axum::http::HeaderMap;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use rand::Rng;
@@ -13,6 +14,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/register", post(register))
         .route("/api/login", post(login))
+        .route("/api/check-quota", post(check_quota))
         .route("/api/unbind-device", post(unbind_device))
         .route("/api/update-phone", post(update_phone))
 }
@@ -181,10 +183,10 @@ async fn register(
         store_id = generate_store_id();
     }
 
-    // Insert account
+    // Insert account (with plan fields)
     let user_id: i32 = sqlx::query_scalar(
-        "INSERT INTO accounts (username, password_hash, display_name, store_name, store_id, phone, hwid, role) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'owner') RETURNING id"
+        "INSERT INTO accounts (username, password_hash, display_name, store_name, store_id, phone, hwid, role, plan_type, trial_ends_at, orders_limit) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'owner', 'trial', NOW() + INTERVAL '30 days', 20) RETURNING id"
     )
     .bind(&username).bind(&password_hash).bind(&store_name).bind(&store_name)
     .bind(&store_id).bind(&phone_val)
@@ -203,8 +205,10 @@ async fn register(
     }
 
     // Generate JWT token using data_store_id
-    let token = auth::create_token(user_id, data_store_id, "owner", &state.config.jwt_secret)?;
-    let refresh_token = auth::create_refresh_token(user_id, data_store_id, "owner", &state.config.jwt_secret)?;
+    let token = auth::create_token(user_id, data_store_id, "owner", "trial", &state.config.jwt_secret)?;
+    let refresh_token = auth::create_refresh_token(user_id, data_store_id, "owner", "trial", &state.config.jwt_secret)?;
+
+    let trial_ends_at = chrono::Utc::now() + chrono::Duration::days(30);
 
     tracing::info!("✅ New account registered: username={}, phone={}, store_id={}, user_id={}", username, phone_val, store_id, user_id);
 
@@ -217,6 +221,9 @@ async fn register(
         "refresh_token": refresh_token,
         "user": { "id": user_id, "username": username, "display_name": store_name, "role": "owner" },
         "stores": [{ "store_id": store_id, "store_name": store_name, "role": "owner", "is_default": true, "data_store_id": data_store_id }],
+        "plan_type": "trial",
+        "trial_ends_at": trial_ends_at.to_rfc3339(),
+        "orders_limit": 20,
         "message": "Đăng ký thành công"
     })))
 }
@@ -244,17 +251,18 @@ async fn login(
         return Ok(Json(json!({ "success": false, "message": "Vui lòng điền đầy đủ thông tin" })));
     }
 
-    // Find account by username OR phone
-    let account = sqlx::query_as::<_, (i32, String, String, String, String, String, bool, i32, Option<chrono::NaiveDateTime>, String)>(
+    // Find account by username OR phone (with plan fields)
+    let account = sqlx::query_as::<_, (i32, String, String, String, String, String, bool, i32, Option<chrono::NaiveDateTime>, String, String, Option<chrono::DateTime<chrono::Utc>>, Option<i32>)>(
         "SELECT id, username, password_hash, display_name, store_name, store_id, is_active, \
-         COALESCE(failed_login_attempts, 0), locked_until, COALESCE(role, 'owner') \
+         COALESCE(failed_login_attempts, 0), locked_until, COALESCE(role, 'owner'), \
+         COALESCE(plan_type, 'free'), trial_ends_at, orders_limit \
          FROM accounts WHERE username = $1 OR phone = $1 LIMIT 1"
     )
     .bind(&input)
     .fetch_optional(&state.pool)
     .await?;
 
-    let (user_id, actual_username, password_hash, display_name, _store_name, _store_id, is_active, failed_attempts, locked_until, db_role) = match account {
+    let (user_id, actual_username, password_hash, display_name, _store_name, _store_id, is_active, failed_attempts, locked_until, db_role, plan_type, trial_ends_at, orders_limit) = match account {
         Some(a) => a,
         None => {
             return Ok(Json(json!({ "success": false, "message": "Tên đăng nhập hoặc mật khẩu không đúng" })));
@@ -329,10 +337,36 @@ async fn login(
         "data_store_id": s.4
     })).collect();
 
+    // Query orders_today for default store
+    let orders_today: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM synced_invoices WHERE store_id = $1 AND DATE(created_at) = CURRENT_DATE"
+    )
+    .bind(active_data_store_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap_or(0);
+
+    // Determine effective_limit
+    let effective_limit: Option<i64> = match plan_type.as_str() {
+        "pro" | "lifetime" => None,
+        "trial" => {
+            if let Some(ends_at) = &trial_ends_at {
+                if *ends_at > chrono::Utc::now() {
+                    None  // Trial còn hạn → không giới hạn
+                } else {
+                    Some(20)  // Trial hết hạn → giới hạn 20
+                }
+            } else {
+                Some(20)
+            }
+        },
+        _ => Some(orders_limit.unwrap_or(20) as i64),
+    };
+
     // Generate JWT with default store's data_store_id and actual role
     let jwt_role = db_role.as_str();
-    let token = auth::create_token(user_id, active_data_store_id, jwt_role, &state.config.jwt_secret)?;
-    let refresh_token = auth::create_refresh_token(user_id, active_data_store_id, jwt_role, &state.config.jwt_secret)?;
+    let token = auth::create_token(user_id, active_data_store_id, jwt_role, &plan_type, &state.config.jwt_secret)?;
+    let refresh_token = auth::create_refresh_token(user_id, active_data_store_id, jwt_role, &plan_type, &state.config.jwt_secret)?;
 
     tracing::info!("✅ Account login: username={}, role={}, store_id={}, stores={}", actual_username, jwt_role, active_store_id, stores.len());
 
@@ -343,7 +377,86 @@ async fn login(
         "user": { "id": user_id, "username": actual_username, "display_name": display_name, "role": jwt_role },
         "store_id": active_store_id,
         "store_name": active_store_name,
-        "stores": stores_json
+        "stores": stores_json,
+        "plan_type": plan_type,
+        "orders_today": orders_today,
+        "orders_limit": effective_limit,
+        "trial_ends_at": trial_ends_at.map(|t| t.to_rfc3339()),
+    })))
+}
+
+// ============================================================
+// POST /api/check-quota
+// Auth: JWT required (Bearer token)
+// ============================================================
+
+fn extract_claims(headers: &HeaderMap, secret: &str) -> Result<auth::Claims, AppError> {
+    let auth_header = headers.get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(AppError::Unauthorized("Missing Authorization header".into()))?;
+    let token = auth_header.strip_prefix("Bearer ").unwrap_or(auth_header);
+    auth::verify_token(token, secret)
+}
+
+async fn check_quota(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_claims(&headers, &state.config.jwt_secret)?;
+    let store_id = claims.store_id;
+
+    // 1. Count orders today
+    let orders_today: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM synced_invoices WHERE store_id = $1 AND DATE(created_at) = CURRENT_DATE"
+    )
+    .bind(store_id)
+    .fetch_one(&state.pool)
+    .await
+    .unwrap_or(0);
+
+    // 2. Get account info via account_stores
+    let account_info = sqlx::query_as::<_, (String, Option<chrono::DateTime<chrono::Utc>>, Option<i32>)>(
+        "SELECT COALESCE(a.plan_type, 'free'), a.trial_ends_at, a.orders_limit \
+         FROM accounts a \
+         JOIN account_stores ast ON a.id = ast.account_id \
+         WHERE ast.data_store_id = $1 \
+         LIMIT 1"
+    )
+    .bind(store_id)
+    .fetch_optional(&state.pool)
+    .await;
+
+    let (db_plan_type, trial_ends_at, orders_limit) = match account_info {
+        Ok(Some(info)) => info,
+        _ => ("free".to_string(), None, Some(20)),
+    };
+
+    // 3. Determine effective limit
+    let effective_limit: Option<i64> = match db_plan_type.as_str() {
+        "pro" | "lifetime" => None,
+        "trial" => {
+            if let Some(ends_at) = &trial_ends_at {
+                if *ends_at > chrono::Utc::now() {
+                    None
+                } else {
+                    Some(20)
+                }
+            } else {
+                Some(20)
+            }
+        },
+        _ => Some(orders_limit.unwrap_or(20) as i64),
+    };
+
+    let remaining = effective_limit.map(|limit| (limit - orders_today).max(0));
+
+    // 4. Response
+    Ok(Json(json!({
+        "plan_type": db_plan_type,
+        "orders_today": orders_today,
+        "orders_limit": effective_limit,
+        "remaining": remaining,
+        "trial_ends_at": trial_ends_at.map(|t| t.to_rfc3339()),
     })))
 }
 

@@ -101,10 +101,10 @@ async fn register(
     .await?;
 
     // Generate JWT
-    let token = auth::create_token(user_id, store_id, "store_owner", &state.config.jwt_secret)?;
+    let token = auth::create_token(user_id, store_id, "store_owner", "free", &state.config.jwt_secret)?;
 
     // Generate refresh token
-    let refresh_token = auth::create_refresh_token(user_id, store_id, "store_owner", &state.config.jwt_secret)?;
+    let refresh_token = auth::create_refresh_token(user_id, store_id, "store_owner", "free", &state.config.jwt_secret)?;
 
     tracing::info!("✅ New user registered: phone={}, store_id={}, license={}", phone, store_id, license_key);
 
@@ -173,10 +173,15 @@ async fn refresh_token(
 
     let role_str = role.unwrap_or_else(|| "store_owner".to_string());
 
+    // Query plan_type from accounts for JWT (fallback "free" for legacy users)
+    let plan_type: String = sqlx::query_scalar(
+        "SELECT COALESCE(plan_type, 'free') FROM accounts WHERE id = $1"
+    ).bind(user_id).fetch_optional(&state.pool).await?.unwrap_or_else(|| "free".to_string());
+
     // Generate new access token
-    let new_token = auth::create_token(user_id, store_id, &role_str, &state.config.jwt_secret)?;
+    let new_token = auth::create_token(user_id, store_id, &role_str, &plan_type, &state.config.jwt_secret)?;
     // Generate new refresh token
-    let new_refresh = auth::create_refresh_token(user_id, store_id, &role_str, &state.config.jwt_secret)?;
+    let new_refresh = auth::create_refresh_token(user_id, store_id, &role_str, &plan_type, &state.config.jwt_secret)?;
 
     Ok(Json(json!({
         "success": true,
@@ -293,12 +298,12 @@ async fn login_with_license(
     // Generate JWT (now includes store_id)
     let role_str = role.clone().unwrap_or_else(|| "store_owner".to_string());
     let token = auth::create_token(
-        user_id, store_id, &role_str, &state.config.jwt_secret,
+        user_id, store_id, &role_str, "free", &state.config.jwt_secret,
     )?;
 
     // Generate refresh token
     let refresh_token = auth::create_refresh_token(
-        user_id, store_id, &role_str, &state.config.jwt_secret,
+        user_id, store_id, &role_str, "free", &state.config.jwt_secret,
     )?;
 
     Ok(Json(json!({

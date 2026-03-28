@@ -10,13 +10,15 @@ pub struct Claims {
     pub store_id: i32, // store id
     pub role: String,
     #[serde(default)]
+    pub plan_type: String, // "free", "trial", "pro", "lifetime" (default empty for backward compat)
+    #[serde(default)]
     pub token_type: String, // "access" or "refresh" (default empty for backward compat)
     pub exp: usize,    // expiration timestamp
     pub iat: usize,    // issued at
 }
 
 /// Create access token (24h)
-pub fn create_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Result<String, AppError> {
+pub fn create_token(user_id: i32, store_id: i32, role: &str, plan_type: &str, secret: &str) -> Result<String, AppError> {
     let now = Utc::now();
     #[allow(deprecated)]
     let expiry = now + Duration::hours(24);
@@ -25,6 +27,7 @@ pub fn create_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Re
         sub: user_id,
         store_id,
         role: role.to_string(),
+        plan_type: plan_type.to_string(),
         token_type: "access".to_string(),
         exp: expiry.timestamp() as usize,
         iat: now.timestamp() as usize,
@@ -38,16 +41,17 @@ pub fn create_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Re
     .map_err(|e| AppError::Internal(format!("JWT encode error: {}", e)))
 }
 
-/// Create refresh token (30 days)
-pub fn create_refresh_token(user_id: i32, store_id: i32, role: &str, secret: &str) -> Result<String, AppError> {
+/// Create refresh token (90 days)
+pub fn create_refresh_token(user_id: i32, store_id: i32, role: &str, plan_type: &str, secret: &str) -> Result<String, AppError> {
     let now = Utc::now();
     #[allow(deprecated)]
-    let expiry = now + Duration::days(30);
+    let expiry = now + Duration::days(90);
 
     let claims = Claims {
         sub: user_id,
         store_id,
         role: role.to_string(),
+        plan_type: plan_type.to_string(),
         token_type: "refresh".to_string(),
         exp: expiry.timestamp() as usize,
         iat: now.timestamp() as usize,

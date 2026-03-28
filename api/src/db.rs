@@ -163,6 +163,54 @@ pub async fn seed_admin(pool: &PgPool) {
          ON CONFLICT (store_id, device_id) DO NOTHING"
     ).execute(pool).await.ok();
 
+    // Sprint 210: Device revoke/wipe columns
+    sqlx::query("ALTER TABLE devices ADD COLUMN IF NOT EXISTS wipe_flag BOOLEAN DEFAULT false")
+        .execute(pool).await.ok();
+    sqlx::query("ALTER TABLE devices ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP")
+        .execute(pool).await.ok();
+
+    // Sprint 210: QR provisioning tokens
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS provision_tokens (\
+         id SERIAL PRIMARY KEY, \
+         store_id INTEGER NOT NULL, \
+         staff_id INTEGER NOT NULL, \
+         qr_token VARCHAR(64) UNIQUE NOT NULL, \
+         permissions JSONB DEFAULT '{}', \
+         expires_at TIMESTAMP NOT NULL, \
+         used_at TIMESTAMP, \
+         created_at TIMESTAMP DEFAULT NOW())"
+    ).execute(pool).await.ok();
+
+    // Sprint 210: Account-based auth tables
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS accounts (\
+         id SERIAL PRIMARY KEY, \
+         username VARCHAR(50) UNIQUE, \
+         phone VARCHAR(20), \
+         password_hash VARCHAR(255) NOT NULL, \
+         plan_type VARCHAR(20) DEFAULT 'free', \
+         trial_ends_at TIMESTAMP, \
+         orders_limit INTEGER DEFAULT 20, \
+         failed_login_attempts INTEGER DEFAULT 0, \
+         locked_until TIMESTAMP, \
+         hwid VARCHAR(255), \
+         is_active BOOLEAN DEFAULT true, \
+         created_at TIMESTAMP DEFAULT NOW(), \
+         updated_at TIMESTAMP DEFAULT NOW())"
+    ).execute(pool).await.ok();
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS account_stores (\
+         id SERIAL PRIMARY KEY, \
+         account_id INTEGER REFERENCES accounts(id), \
+         store_id INTEGER REFERENCES stores(id), \
+         data_store_id INTEGER, \
+         role VARCHAR(20) DEFAULT 'owner', \
+         is_default BOOLEAN DEFAULT false, \
+         created_at TIMESTAMP DEFAULT NOW())"
+    ).execute(pool).await.ok();
+
     // v8: loyalty sync support
     sqlx::query("ALTER TABLE synced_customers ADD COLUMN IF NOT EXISTS loyalty_points INTEGER DEFAULT 0").execute(pool).await.ok();
     sqlx::query("ALTER TABLE synced_customers ADD COLUMN IF NOT EXISTS total_spent REAL DEFAULT 0").execute(pool).await.ok();
@@ -329,6 +377,12 @@ pub async fn sync_v2_init(pool: &PgPool) {
          created_at TIMESTAMP DEFAULT NOW(), \
          UNIQUE(store_id, device_id))"
     ).execute(pool).await.ok();
+
+    // Sprint 180: FCM token storage for push notifications
+    sqlx::query("ALTER TABLE sync_devices ADD COLUMN IF NOT EXISTS fcm_token TEXT")
+        .execute(pool).await.ok();
+    sqlx::query("ALTER TABLE sync_devices ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'unknown'")
+        .execute(pool).await.ok();
 
     // ── 6. log_sync_journal PG function ─────────────────────────────────────
     sqlx::query(

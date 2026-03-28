@@ -2,7 +2,8 @@ use axum::{Router, Json, routing::{post, get, delete, patch}, extract::{State, P
 use axum::http::HeaderMap;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use chrono::Utc;
+use chrono::{Utc, Duration};
+use rand::Rng;
 
 use crate::AppState;
 use crate::error::AppError;
@@ -28,13 +29,31 @@ pub struct RenameDeviceRequest {
     pub device_name: String,
 }
 
+#[derive(Deserialize)]
+pub struct ProvisionRequest {
+    pub staff_id: i32,
+    #[serde(default)]
+    pub permissions: Option<Value>,
+    pub store_id: Option<i32>,
+}
+
+#[derive(Deserialize)]
+pub struct ActivateRequest {
+    pub qr_token: String,
+    #[serde(default)]
+    pub device_info: Option<Value>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/verify-license", post(verify_license))
         .route("/api/check-activation", post(check_activation))
         .route("/api/devices", get(list_devices))
-        .route("/api/devices/{id}", delete(remove_device))
-        .route("/api/devices/{id}", patch(rename_device))
+        // Sprint 215B: Static routes BEFORE parameterized routes to prevent 405
+        .route("/api/devices/provision", post(provision_device))
+        .route("/api/devices/activate", post(activate_device))
+        .route("/api/devices/{id}", delete(remove_device).patch(rename_device))
+        .route("/api/devices/{id}/revoke", post(revoke_device))
 }
 
 // ============================================================
@@ -384,4 +403,178 @@ async fn rename_device(
         .await?;
 
     Ok(Json(json!({ "success": true })))
+}
+
+// ============================================================
+// POST /api/devices/:id/revoke — Revoke device + set wipe flag (JWT)
+// ============================================================
+async fn revoke_device(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<i32>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_jwt(&headers, &state.config.jwt_secret)?;
+    let store_id = claims.store_id;
+
+    // Verify device belongs to user's store
+    let device = sqlx::query_as::<_, (i32,)>(
+        "SELECT id FROM devices WHERE id = $1 AND store_id = $2"
+    )
+    .bind(id)
+    .bind(store_id)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    if device.is_none() {
+        return Err(AppError::NotFound("Thiết bị không tồn tại hoặc không thuộc cửa hàng này".into()));
+    }
+
+    // Set wipe_flag, revoked_at, deactivate
+    sqlx::query(
+        "UPDATE devices SET wipe_flag = true, revoked_at = NOW(), is_active = false WHERE id = $1"
+    )
+    .bind(id)
+    .execute(&state.pool)
+    .await?;
+
+    tracing::info!("🔒 Sprint 210: Device {} revoked by store_id={}", id, store_id);
+
+    Ok(Json(json!({
+        "success": true,
+        "wipe_authorized": true
+    })))
+}
+
+// ============================================================
+// POST /api/devices/provision — Owner creates QR token for staff (JWT, role=owner)
+// ============================================================
+async fn provision_device(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<ProvisionRequest>,
+) -> Result<Json<Value>, AppError> {
+    let claims = extract_jwt(&headers, &state.config.jwt_secret)?;
+
+    // Only owner/admin can provision
+    if claims.role != "store_owner" && claims.role != "admin" {
+        return Err(AppError::Forbidden("Chỉ chủ cửa hàng mới có thể cấp phát thiết bị".into()));
+    }
+
+    let store_id = req.store_id.unwrap_or(claims.store_id);
+
+    // Generate random 64-char hex token (Scoped to avoid holding ThreadRng across await)
+    let qr_token: String = {
+        let mut rng = rand::thread_rng();
+        (0..32).map(|_| format!("{:02x}", rng.gen::<u8>())).collect()
+    };
+
+    #[allow(deprecated)]
+    let expires_at = Utc::now().naive_utc() + Duration::seconds(180);
+    let permissions = req.permissions.unwrap_or(json!({}));
+
+    sqlx::query(
+        "INSERT INTO provision_tokens (store_id, staff_id, qr_token, permissions, expires_at) \
+         VALUES ($1, $2, $3, $4, $5)"
+    )
+    .bind(store_id)
+    .bind(req.staff_id)
+    .bind(&qr_token)
+    .bind(&permissions)
+    .bind(expires_at)
+    .execute(&state.pool)
+    .await?;
+
+    tracing::info!("📱 Sprint 210: Provision token created for store_id={}, staff_id={}", store_id, req.staff_id);
+
+    Ok(Json(json!({
+        "success": true,
+        "qr_token": qr_token,
+        "expires_at": expires_at.and_utc().to_rfc3339()
+    })))
+}
+
+// ============================================================
+// POST /api/devices/activate — Staff scans QR to activate device (no JWT)
+// ============================================================
+async fn activate_device(
+    State(state): State<AppState>,
+    Json(req): Json<ActivateRequest>,
+) -> Result<Json<Value>, AppError> {
+    // Lookup provision token
+    let token_row = sqlx::query_as::<_, (i32, i32, i32, serde_json::Value, chrono::NaiveDateTime, Option<chrono::NaiveDateTime>)>(
+        "SELECT id, store_id, staff_id, permissions, expires_at, used_at FROM provision_tokens WHERE qr_token = $1"
+    )
+    .bind(&req.qr_token)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let (token_id, store_id, staff_id, _permissions, expires_at, used_at) = match token_row {
+        Some(r) => r,
+        None => return Err(AppError::NotFound("QR token không hợp lệ".into())),
+    };
+
+    // Check not already used
+    if used_at.is_some() {
+        return Err(AppError::BadRequest("QR token đã được sử dụng".into()));
+    }
+
+    // Check not expired
+    if expires_at < Utc::now().naive_utc() {
+        return Err(AppError::BadRequest("QR token đã hết hạn".into()));
+    }
+
+    // Mark token as used
+    sqlx::query("UPDATE provision_tokens SET used_at = NOW() WHERE id = $1")
+        .bind(token_id)
+        .execute(&state.pool)
+        .await?;
+
+    // Get staff info for JWT
+    let staff = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT phone, role FROM users WHERE id = $1 AND store_id = $2"
+    )
+    .bind(staff_id)
+    .bind(store_id)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let (_, role) = match staff {
+        Some(s) => s,
+        None => return Err(AppError::NotFound("Nhân viên không tồn tại".into())),
+    };
+
+    let role_str = role.unwrap_or_else(|| "staff".to_string());
+
+    // Register device if device_info provided
+    if let Some(info) = &req.device_info {
+        let device_id = info.get("device_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let device_type = info.get("device_type").and_then(|v| v.as_str()).unwrap_or("android");
+        let device_name = info.get("device_name").and_then(|v| v.as_str()).unwrap_or("Staff Device");
+
+        sqlx::query(
+            "INSERT INTO devices (store_id, device_id, device_type, device_name, is_active, first_activated_at, last_active_at) \
+             VALUES ($1, $2, $3, $4, true, NOW(), NOW()) \
+             ON CONFLICT (store_id, device_id) DO UPDATE SET is_active = true, last_active_at = NOW(), device_type = $3"
+        )
+        .bind(store_id)
+        .bind(device_id)
+        .bind(device_type)
+        .bind(device_name)
+        .execute(&state.pool)
+        .await?;
+    }
+
+    // Create JWT for staff
+    let token = auth::create_token(staff_id, store_id, &role_str, "free", &state.config.jwt_secret)?;
+    let refresh_token = auth::create_refresh_token(staff_id, store_id, &role_str, "free", &state.config.jwt_secret)?;
+
+    tracing::info!("✅ Sprint 210: Device activated via QR for store_id={}, staff_id={}", store_id, staff_id);
+
+    Ok(Json(json!({
+        "success": true,
+        "token": token,
+        "refresh_token": refresh_token,
+        "store_id": store_id,
+        "role": role_str
+    })))
 }

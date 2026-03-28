@@ -177,11 +177,13 @@ async fn handle_sync_socket(socket: WebSocket, state: AppState, store_id: i32) {
 /// Broadcast a sync_update event to all WebSocket subscribers for a store.
 /// Called from sync handlers after successful push/commit.
 /// DashMap lookup is lock-free — safe to call from any async context.
-pub fn broadcast_sync_event(sync_rooms: &WsRegistry, store_id: i32, collections: &[&str]) {
+/// Sprint 177: Added source_device so App can filter out self-originated events.
+pub fn broadcast_sync_event(sync_rooms: &WsRegistry, store_id: i32, collections: &[&str], source_device: &str) {
     let msg = json!({
         "type": "sync_update",
         "store_id": store_id,
         "collections": collections,
+        "source_device": source_device,
         "timestamp": chrono::Utc::now().to_rfc3339()
     }).to_string();
 
@@ -189,8 +191,8 @@ pub fn broadcast_sync_event(sync_rooms: &WsRegistry, store_id: i32, collections:
         let count = tx.receiver_count();
         if count > 0 {
             let _ = tx.send(msg);
-            tracing::info!("�� Broadcast sync_update to {} subscribers for store_id={}, collections={:?}",
-                count, store_id, collections);
+            tracing::info!("Broadcast sync_update to {} subscribers for store_id={}, collections={:?}, source={}",
+                count, store_id, collections, source_device);
         }
     }
 }

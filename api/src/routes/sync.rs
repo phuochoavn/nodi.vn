@@ -680,7 +680,7 @@ async fn handle_sync(
         .collect();
     if !changed.is_empty() {
         crate::routes::ws_sync::broadcast_sync_event(
-            &state.sync_rooms, store_id, &changed
+            &state.sync_rooms, store_id, &changed, ""
         );
     }
 

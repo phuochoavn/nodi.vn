@@ -24,3 +24,4 @@ prost = "0.13"
 dashmap = "5"
 axum-prometheus = "0.7"
 governor = "0.6"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }

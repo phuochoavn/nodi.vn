@@ -96,12 +96,16 @@ services:
       DB_USER: nodi_app
       ADMIN_PHONE: ${ADMIN_PHONE}
       RUST_LOG: nodi_api=debug,tower_http=debug
+      # Sprint 186: Firebase FCM push notifications
+      FCM_PROJECT_ID: nodi-pos
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/nodi/config/firebase-service-account.json
     depends_on:
       - pgbouncer
     volumes:
       - ./backups:/opt/nodi/backups
       - ./uploads:/opt/nodi/uploads
       - ./downloads:/opt/nodi/downloads
+      - ./config/firebase-service-account.json:/opt/nodi/config/firebase-service-account.json:ro
     # Sprint 167: Healthcheck for zero-downtime deploy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]

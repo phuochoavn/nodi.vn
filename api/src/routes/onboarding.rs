@@ -233,10 +233,10 @@ async fn register_device(
 
     // Issue JWT (sub = store_id as user proxy, store_id = store_id)
     let access_token = auth::create_token(
-        store_id, store_id, "device", &state.config.jwt_secret
+        store_id, store_id, "device", "free", &state.config.jwt_secret
     )?;
     let refresh_token = auth::create_refresh_token(
-        store_id, store_id, "device", &state.config.jwt_secret
+        store_id, store_id, "device", "free", &state.config.jwt_secret
     )?;
 
     tracing::info!(

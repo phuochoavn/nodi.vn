@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/v2/sync/push", post(handle_push))
         .route("/api/v2/sync/pull", get(handle_pull))
         .route("/api/v2/sync/snapshot", get(handle_snapshot))
+        .route("/api/v2/sync/register-device", post(handle_register_device))
 }
 
 // ============================================================
@@ -109,6 +110,70 @@ async fn handle_push(
 
     let total_changes: usize = changes.values().map(|v| v.len()).sum();
 
+    // ── Sprint 197: Quota enforcement for invoices ──────────────────────────
+    let mut changes = changes; // make mutable
+    let mut rejected_tables: Vec<String> = Vec::new();
+    let mut rejection_info: Option<(i64, i64)> = None; // (orders_today, limit)
+
+    let invoice_tables = ["invoices", "invoice_items", "invoice_payments"];
+    let has_invoices = changes.contains_key("invoices") && !changes.get("invoices").map_or(true, |v| v.is_empty());
+
+    if has_invoices {
+        // Query account plan info for this store
+        let plan_info = sqlx::query_as::<_, (String, Option<chrono::DateTime<chrono::Utc>>, Option<i32>)>(
+            "SELECT COALESCE(a.plan_type, 'free'), a.trial_ends_at, a.orders_limit \
+             FROM accounts a \
+             JOIN account_stores ast ON a.id = ast.account_id \
+             WHERE ast.data_store_id = $1 \
+             LIMIT 1"
+        )
+        .bind(store_id)
+        .fetch_optional(&state.pool)
+        .await
+        .ok()
+        .flatten();
+
+        let should_enforce = match &plan_info {
+            Some((plan_type, trial_ends_at, _)) => match plan_type.as_str() {
+                "pro" | "lifetime" => false,
+                "trial" => match trial_ends_at {
+                    Some(ends_at) if *ends_at > chrono::Utc::now() => false,
+                    _ => true,
+                },
+                _ => true, // "free" → enforce
+            },
+            None => false, // No account info (legacy/device auth) → no enforcement
+        };
+
+        if should_enforce {
+            let current_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM synced_invoices WHERE store_id = $1 AND DATE(created_at) = CURRENT_DATE"
+            )
+            .bind(store_id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap_or(0);
+
+            let limit = plan_info.as_ref().and_then(|(_, _, ol)| *ol).unwrap_or(20) as i64;
+            let batch_invoice_count = changes.get("invoices").map_or(0, |v| v.len()) as i64;
+
+            if current_count + batch_invoice_count > limit {
+                // Remove invoice-related tables from changes
+                for table in &invoice_tables {
+                    if changes.remove(*table).is_some() {
+                        rejected_tables.push(table.to_string());
+                    }
+                }
+                rejection_info = Some((current_count, limit));
+                tracing::warn!(
+                    "⚠️ Quota exceeded: store_id={}, plan=free, today={}, batch={}, limit={}. Rejected: {:?}",
+                    store_id, current_count, batch_invoice_count, limit, rejected_tables
+                );
+            }
+        }
+    }
+    // ── End quota enforcement ───────────────────────────────────────────────
+
     // Process via merge engine
     let (new_cursor, processed, conflicts, computed_updates) =
         merge_engine::process_push(
@@ -125,13 +190,21 @@ async fn handle_push(
     if processed > 0 {
         let changed_tables: Vec<&str> = changes.keys().map(|s| s.as_str()).collect();
         crate::routes::ws_sync::broadcast_sync_event(
-            &state.sync_rooms, store_id, &changed_tables
+            &state.sync_rooms, store_id, &changed_tables, &device_id
         );
+
+        // Sprint 180: FCM push for background/killed devices (async, non-blocking)
+        let fcm_pool = state.pool.clone();
+        let fcm_device = device_id.clone();
+        let fcm_tables: Vec<String> = changes.keys().cloned().collect();
+        tokio::spawn(async move {
+            crate::services::fcm::send_data_message(&fcm_pool, store_id, &fcm_device, fcm_tables).await;
+        });
     }
 
     tracing::info!(
-        "✅ V2 Push: store_id={}, device={}, batch={}, total={}, processed={}, conflicts={}, proto={}",
-        store_id, device_id, batch_id, total_changes, processed, conflict_count, use_proto
+        "✅ V2 Push: store_id={}, device={}, batch={}, total={}, processed={}, conflicts={}, proto={}, rejected={:?}",
+        store_id, device_id, batch_id, total_changes, processed, conflict_count, use_proto, rejected_tables
     );
 
     // Response — Protobuf or JSON
@@ -147,7 +220,7 @@ async fn handle_push(
         };
         Ok(proto_response(&proto_resp))
     } else {
-        Ok(Json(json!({
+        let mut resp = json!({
             "success": true,
             "message": format!("Đã nhận {} thay đổi, xử lý {}, xung đột {}", total_changes, processed, conflict_count),
             "data": {
@@ -157,7 +230,17 @@ async fn handle_push(
                 "computed_updates": computed_updates,
                 "last_processed_client_tx_id": max_journal_id
             }
-        })).into_response())
+        });
+        // Append rejection info if any tables were rejected
+        if !rejected_tables.is_empty() {
+            if let Some((orders_today, limit)) = rejection_info {
+                resp["rejected_tables"] = json!(rejected_tables);
+                resp["reason"] = json!("FREE_LIMIT_REACHED");
+                resp["orders_today"] = json!(orders_today);
+                resp["orders_limit"] = json!(limit);
+            }
+        }
+        Ok(Json(resp).into_response())
     }
 }
 
@@ -190,6 +273,29 @@ async fn handle_pull(
 
     if device_id.is_empty() {
         return Err(AppError::BadRequest("X-Device-Id cannot be empty".into()));
+    }
+
+    // Sprint 210: Check if device has been revoked — trigger wipe on client
+    let revoked = sqlx::query_as::<_, (bool,)>(
+        "SELECT COALESCE(wipe_flag, false) FROM devices \
+         WHERE store_id = $1 AND device_id = $2 AND (wipe_flag = true OR revoked_at IS NOT NULL)"
+    )
+    .bind(store_id)
+    .bind(&device_id)
+    .fetch_optional(&state.pool)
+    .await
+    .ok()
+    .flatten();
+
+    if revoked.is_some() {
+        tracing::warn!("🔒 Sprint 210: Revoked device attempted pull: store_id={}, device={}", store_id, device_id);
+        return Ok((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "WIPE_AUTHORIZED",
+                "message": "Device has been revoked"
+            })),
+        ).into_response());
     }
 
     let limit = params.limit.min(1000).max(1);
@@ -305,4 +411,58 @@ async fn handle_snapshot(
             "watermark_cursor": watermark_cursor
         })).into_response())
     }
+}
+
+// ============================================================
+// POST /api/v2/sync/register-device — Sprint 180: FCM token registration
+// ============================================================
+
+#[derive(Deserialize)]
+struct RegisterDeviceRequest {
+    #[serde(default)]
+    fcm_token: Option<String>,
+    #[serde(default)]
+    platform: Option<String>,
+}
+
+async fn handle_register_device(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<TenantContext>,
+    headers: HeaderMap,
+    Json(body): Json<RegisterDeviceRequest>,
+) -> Result<Json<Value>, AppError> {
+    let store_id = ctx.store_id;
+    let device_id = ctx.device_id
+        .or_else(|| get_header(&headers, "x-device-id"))
+        .ok_or_else(|| AppError::BadRequest("Missing device_id".into()))?;
+
+    if device_id.is_empty() {
+        return Err(AppError::BadRequest("device_id cannot be empty".into()));
+    }
+
+    let fcm_token = body.fcm_token.unwrap_or_default();
+    let platform = body.platform.unwrap_or_else(|| "unknown".to_string());
+
+    // Upsert device with FCM token
+    sqlx::query(
+        "INSERT INTO sync_devices (store_id, device_id, fcm_token, platform)          VALUES ($1, $2, $3, $4)          ON CONFLICT (store_id, device_id) DO UPDATE SET          fcm_token = EXCLUDED.fcm_token, platform = EXCLUDED.platform"
+    )
+    .bind(store_id)
+    .bind(&device_id)
+    .bind(&fcm_token)
+    .bind(&platform)
+    .execute(&state.pool)
+    .await?;
+
+    tracing::info!(
+        "Sprint 180: Device registered: store_id={}, device={}, platform={}, has_token={}",
+        store_id, device_id, platform, !fcm_token.is_empty()
+    );
+
+    Ok(Json(json!({
+        "success": true,
+        "message": "Device registered",
+        "device_id": device_id,
+        "platform": platform
+    })))
 }

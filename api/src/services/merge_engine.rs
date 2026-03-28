@@ -110,6 +110,10 @@ pub async fn process_push(
                         MergeRule::Lww => {
                             merge_insert_lww(&mut tx, store_id, meta.pg_table, table_name, device_id, record).await
                         }
+                        MergeRule::PnCounter => {
+                            // Sprint 175A: PN-Counter CRDT — GREATEST() merge
+                            merge_insert_pn_counter(&mut tx, store_id, meta.pg_table, table_name, device_id, record).await
+                        }
                     }
                 }
                 "UPDATE" => {
@@ -541,6 +545,72 @@ async fn merge_update_record(
     }
 
     query.execute(&mut **tx).await?;
+    Ok(MergeOutcome::Applied)
+}
+
+// ============================================================
+// PN-Counter CRDT — Sprint 175A
+// Uses GREATEST() for p_count and n_count to ensure monotonic increase
+// ============================================================
+
+async fn merge_insert_pn_counter(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    store_id: i32,
+    _pg_table: &str,
+    _table_name: &str,
+    device_id: &str,
+    record: &ChangeRecord,
+) -> Result<MergeOutcome, crate::error::AppError> {
+    let data = match record.data.as_object() {
+        Some(obj) => obj,
+        None => return Ok(MergeOutcome::Skipped),
+    };
+
+    let product_id = data.get("product_id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let p_count = data.get("p_count")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let n_count = data.get("n_count")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let local_id = data.get("local_id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let updated_at = data.get("updated_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    // PN-Counter CRDT merge:
+    // - p_count only increases (stock in) → take MAX
+    // - n_count only increases (stock out) → take MAX
+    let sql = r#"
+        INSERT INTO synced_inventory_counters
+            (store_id, local_id, product_id, device_id, p_count, n_count, uuid, updated_at, synced_at, updated_at_v2)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        ON CONFLICT (store_id, product_id, device_id)
+        DO UPDATE SET
+            p_count = GREATEST(synced_inventory_counters.p_count, EXCLUDED.p_count),
+            n_count = GREATEST(synced_inventory_counters.n_count, EXCLUDED.n_count),
+            uuid = EXCLUDED.uuid,
+            updated_at = EXCLUDED.updated_at,
+            synced_at = NOW(),
+            updated_at_v2 = NOW()
+    "#;
+
+    sqlx::query(sql)
+        .bind(store_id)
+        .bind(local_id)
+        .bind(product_id)
+        .bind(device_id)
+        .bind(p_count)
+        .bind(n_count)
+        .bind(&record.uuid)
+        .bind(updated_at)
+        .execute(&mut **tx)
+        .await?;
+
     Ok(MergeOutcome::Applied)
 }
 
@@ -1095,6 +1165,10 @@ const SNAPSHOT_TABLES: &[(&str, &str)] = &[
     ("promotions", "synced_promotions"),
     ("vouchers", "synced_vouchers"),
     ("loyalty_transactions_v2", "synced_loyalty_transactions_v2"),
+    // Sprint 175A: 3 new tables
+    ("inventory_counters", "synced_inventory_counters"),
+    ("input_invoices", "synced_input_invoices"),
+    ("input_invoice_items", "synced_input_invoice_items"),
 ];
 
 /// Build a full snapshot of all synced tables for a store.

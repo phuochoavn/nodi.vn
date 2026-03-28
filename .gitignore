@@ -46,3 +46,4 @@ Thumbs.db
 *.swp
 *.swo
 secrets/
+config/firebase-service-account.json

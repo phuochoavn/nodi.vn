@@ -79,6 +79,7 @@ pub struct PullChangeRecord {
 pub enum MergeRule {
     UuidDedup,  // Append-only: INSERT if UUID not exists, skip if exists
     Lww,        // Last-Write-Wins by updated_at
+    PnCounter,  // Sprint 175A: PN-Counter CRDT — GREATEST() merge for p_count/n_count
 }
 
 pub struct TableMeta {
@@ -118,8 +119,11 @@ pub fn get_table_meta(client_name: &str) -> Option<TableMeta> {
         "return_items" => Some(TableMeta { pg_table: "synced_return_items", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
         "daily_closings" => Some(TableMeta { pg_table: "synced_daily_closings", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
         "loyalty_transactions" => Some(TableMeta { pg_table: "synced_loyalty_transactions_v2", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
-        "input_invoices" => Some(TableMeta { pg_table: "synced_purchase_orders", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
-        "input_invoice_items" => Some(TableMeta { pg_table: "synced_purchase_items", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
+        // Sprint 175A: Fixed mappings (were incorrectly pointing to purchase_orders/purchase_items)
+        "input_invoices" => Some(TableMeta { pg_table: "synced_input_invoices", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
+        "input_invoice_items" => Some(TableMeta { pg_table: "synced_input_invoice_items", merge_rule: MergeRule::UuidDedup, affects_computed: false }),
+        // Sprint 175A: PN-Counter CRDT for inventory counters
+        "inventory_counters" => Some(TableMeta { pg_table: "synced_inventory_counters", merge_rule: MergeRule::PnCounter, affects_computed: false }),
         _ => None,
     }
 }
